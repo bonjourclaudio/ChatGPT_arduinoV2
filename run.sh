@@ -92,20 +92,19 @@ fi
 
 # Function to clean up on exit
 cleanup() {
+  # prevent re-entrant cleanup
+  if [[ "${CLEANING_UP:-0}" == "1" ]]; then
+    log "Cleanup already in progress - skipping re-entry"
+    return
+  fi
+  CLEANING_UP=1
   log "Shutting down servers and cleaning up..."
 
-    # Stop USB watcher if running
+  # Stop USB watcher if running
   if [[ -n "$WATCHER_PID" ]]; then
     log "Stopping USB watcher (pid: $WATCHER_PID)..."
     kill "$WATCHER_PID" 2>/dev/null || true
     wait "$WATCHER_PID" 2>/dev/null || true
-  fi
-
-  # Stop tail process if running (mirror to terminal)
-  if [[ -n "$TAIL_PID" ]]; then
-    log "Stopping log tail (pid: $TAIL_PID)..."
-    kill "$TAIL_PID" 2>/dev/null || true
-    wait "$TAIL_PID" 2>/dev/null || true
   fi
 
   # Kill any process using port 3000 or 5173
@@ -153,8 +152,9 @@ cleanup() {
   log "Cleanup complete."
 }
 
-# Trap INT/TERM and run cleanup then exit (do not use EXIT here)
-trap 'cleanup; exit 0' SIGINT SIGTERM
+# Trap INT/TERM/USR1 and run cleanup (do not exit here so the top-level loop can handle restart)
+# watcher will send SIGUSR1 to request a restart
+trap 'cleanup' SIGINT SIGTERM SIGUSR1
 
 # Run cleanup at the start to clear old processes
 cleanup
@@ -188,7 +188,8 @@ fi
 watch_for_usb() {
   log "Starting USB watcher..."
   local bases=( "/media/$USER" "/media" "/mnt" "/run/media/$USER" "/Volumes" )
-  declare -A seen
+  # Use an indexed array for seen paths (macOS /bin/bash doesn't support associative arrays)
+  seen_list=()
   local main_pid="$1"
 
   while true; do
@@ -196,15 +197,23 @@ watch_for_usb() {
       [[ -d "$base" ]] || continue
       while IFS= read -r -d '' cfg; do
         cfg="${cfg%/}"
-        if [[ -z "${seen[$cfg]}" ]]; then
-          seen[$cfg]=1
+        # membership check (handles spaces) - linear search but fine for small numbers of mounts
+        found=false
+        for s in "${seen_list[@]}"; do
+          if [[ "$s" == "$cfg" ]]; then
+            found=true
+            break
+          fi
+        done
+        if ! $found; then
+          seen_list+=("$cfg")
           log "📱 Detected USB config: $cfg — requesting restart..."
           # create restart marker for the parent to see
           touch "$RESTART_FILE"
           # signal parent to terminate so it can perform cleanup and then restart
           if [[ -n "$main_pid" ]]; then
-            log "Signaling main pid $main_pid to terminate..."
-            kill -TERM "$main_pid" 2>/dev/null || true
+              log "Signaling main pid $main_pid to request restart (SIGUSR1)..."
+              kill -USR1 "$main_pid" 2>/dev/null || true
           fi
           # exit watcher — do not exec from the watcher (avoids race with parent's cleanup)
           log "USB watcher exiting after request."
