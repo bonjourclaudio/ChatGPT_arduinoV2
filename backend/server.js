@@ -87,23 +87,19 @@ async function main() {
       console.log('📶 WiFi configuration found, attempting to connect...');
       currentInstances.wifiManager = new WiFiManager();
 
-      // Check if already connected
-      const connectionStatus = await currentInstances.wifiManager.getConnectionStatus();
-      if (!connectionStatus.connected) {
-        console.log('Not connected to WiFi, attempting connection...');
+      try {
+        // Always attempt to connect using the provided config (connectFromConfig
+        // will detect type and use saved secrets if available).
         const result = await currentInstances.wifiManager.connectFromConfig(config.wifi);
-        if (result.success) {
+        if (result && result.success) {
           console.log('✅ WiFi connected successfully:', result.message);
-          // Get connection info
           const info = await currentInstances.wifiManager.getConnectionInfo();
           console.log(`📡 Connected to: ${info.ssid}, IP: ${info.ip}`);
         } else {
-          console.log('❌ WiFi connection failed:', result.message);
+          console.log('❌ WiFi connection failed:', result ? result.message : 'unknown error');
         }
-      } else {
-        console.log('✅ Already connected to WiFi');
-        const info = await currentInstances.wifiManager.getConnectionInfo();
-        console.log(`📡 Current connection: ${info.ssid}, IP: ${info.ip}`);
+      } catch (err) {
+        console.error('❌ Error while attempting WiFi connection:', err.message || err);
       }
     } else {
       console.log('No WiFi configuration found in config.js');
@@ -169,8 +165,8 @@ async function main() {
 
     // 2. Initialize speech to text
     console.log('🎤 Initializing speech to text...');
-    
-    currentInstances.speechToText = new SpeechToText(callBackSpeechToText,  config.speechToTextModel);
+
+    currentInstances.speechToText = new SpeechToText(callBackSpeechToText, config.speechToTextModel);
 
     // 3. Setup Express middleware
     currentInstances.app.use(cors());
