@@ -144,12 +144,17 @@ class WiFiManager {
 
             await execAsync(command);
 
-            // <<< INSERT: prevent NM storing plaintext PSK in the system file
-            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.psk-flags 1`);
-            // remove any remaining plaintext lines in the system file (best-effort)
-            await execAsync(`sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`);
-            // <<< END INSERT
+            console.log(`WiFi profile created for ${ssid}`);
 
+            // Attempt to connect (provide secret so NM can activate)
+            await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
+            console.log(`Successfully connected to ${ssid}`);
+
+            // Now prevent NM storing plaintext PSK in the system file
+            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.psk-flags 1`);
+            await execAsync(
+                `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
+            );
             console.log(`WiFi profile created for ${ssid}`);
 
             // Attempt to connect
@@ -181,11 +186,17 @@ class WiFiManager {
 
             await execAsync(command);
 
-            // <<< INSERT: prevent NM storing plaintext EAP password in the system file
+            console.log(`WiFi Enterprise profile created for ${ssid}`);
+
+            // Attempt to connect (provide secret so NM can activate)
+            await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
+            console.log(`Successfully connected to ${ssid}`);
+
+            // Now prevent NM storing plaintext EAP password in the system file
             await execAsync(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
-            // remove any remaining plaintext lines in the system file (best-effort)
-            await execAsync(`sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`);
-            // <<< END INSERT
+            await execAsync(
+                `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
+            );
 
             console.log(`WiFi Enterprise profile created for ${ssid}`);
 
