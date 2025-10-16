@@ -140,30 +140,27 @@ class WiFiManager {
 
             await this.removeConnection(this.connectionName);
 
-            const command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}" ipv4.method auto connection.autoconnect yes`;
+            // create connection without storing secret
+            const addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            await execAsync(addCmd);
 
-            await execAsync(command);
+            // store secret via nmcli modify (this writes the secret so NM can activate)
+            // For WPA-PSK:
+            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}"`);
 
-            console.log(`WiFi profile created for ${ssid}`);
-
-            // Attempt to connect (provide secret so NM can activate)
+            // attempt to bring the connection up (NM now has the secret to use)
             await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
 
-            // Now prevent NM storing plaintext PSK in the system file
-            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.psk-flags 1`);
+            // immediately mark the secret as not stored and scrub plaintext from the system file
+            // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
+            await execAsync(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
             await execAsync(
                 `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
             );
-            console.log(`WiFi profile created for ${ssid}`);
 
-            // Attempt to connect
-            await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
-            console.log(`Successfully connected to ${ssid}`);
-
-            // Persist secret locally (obfuscated)
+            // persist local encrypted copy
             this.saveSecret(ssid, password);
-
             return { success: true, message: `Connected to ${ssid}` };
         } catch (error) {
             console.error('Error connecting to WPA network:', error.message);
@@ -177,34 +174,28 @@ class WiFiManager {
     async connectToWPA2Enterprise(ssid, username, password) {
         try {
             console.log(`Attempting to connect to WPA2 Enterprise network: ${ssid}`);
-
-            // ...existing code...
-
             await this.removeConnection(this.connectionName);
 
-            const command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" wifi-sec.key-mgmt wpa-eap 802-1x.eap peap 802-1x.phase2-auth mschapv2 802-1x.identity "${username}" 802-1x.password "${password}" ipv4.method auto connection.autoconnect yes`;
+            // create connection without storing secret
+            const addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            await execAsync(addCmd);
 
-            await execAsync(command);
+            // store secret via nmcli modify (this writes the secret so NM can activate)
+            // For WPA2-Enterprise (EAP):
+            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-eap 802-1x.eap peap 802-1x.phase2-auth mschapv2 802-1x.identity "${username}" 802-1x.password "${password}"`);
 
-            console.log(`WiFi Enterprise profile created for ${ssid}`);
-
-            // Attempt to connect (provide secret so NM can activate)
+            // attempt to bring the connection up (NM now has the secret to use)
             await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
 
-            // Now prevent NM storing plaintext EAP password in the system file
+            // immediately mark the secret as not stored and scrub plaintext from the system file
+            // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
             await execAsync(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
             await execAsync(
                 `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
             );
 
-            console.log(`WiFi Enterprise profile created for ${ssid}`);
-
-            // Attempt to connect
-            await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
-            console.log(`Successfully connected to ${ssid}`);
-
-            // Persist secret locally (obfuscated)
+            // persist local encrypted copy
             this.saveSecret(ssid, password);
 
             return { success: true, message: `Connected to ${ssid}` };
