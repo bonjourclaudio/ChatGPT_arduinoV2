@@ -1,13 +1,13 @@
-# ...existing code...
 #!/bin/bash
 set -m
 
-# Directory of this script
+# Directory of this script (absolute)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Set log file location
-LOG_FILE="$SCRIPT_DIR/logs/kiosk.log"
-mkdir -p "$(dirname "$LOG_FILE")"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/kiosk.log"
 
 # Restart marker file used by USB watcher
 RESTART_FILE="$SCRIPT_DIR/.kiosk_restart_request"
@@ -18,16 +18,16 @@ log() {
 }
 
 # Redirect all stdout and stderr to log file (avoid process-substitution which can change signal delivery)
-exec >>"$LOG_FILE" 2>&1
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-# If we have a controlling terminal, mirror the log to it so you still see console output.
-if [ -t 1 ] && [ -w /dev/tty ]; then
-  # show last 200 lines and follow new output, writing directly to the user's terminal
+# If /dev/tty is writable, mirror the log to it so you still see console output.
+# Note: don't test -t 1 because stdout is already redirected to the log file.
+if [ -w /dev/tty ]; then
   tail -n 200 -F "$LOG_FILE" >/dev/tty 2>/dev/tty &
   TAIL_PID=$!
   log "Started log tail (pid: $TAIL_PID) -> /dev/tty"
 else
-  log "No interactive terminal detected; skipping live console mirror."
+  log "No writable /dev/tty detected; skipping live console mirror."
 fi
 
 log "Starting application"
