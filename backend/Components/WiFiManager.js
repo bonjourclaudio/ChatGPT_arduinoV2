@@ -1,3 +1,7 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -8,12 +12,89 @@ class WiFiManager {
         this.connectionName = 'auto-connect-wifi';
     }
 
+    // --- secret store helpers ---
+    _secretsFilePath() {
+        return path.join(os.homedir(), '.config', 'chatgpt_arduino', 'wifi_secrets.json');
+    }
+
+    _ensureSecretsDir() {
+        const dir = path.dirname(this._secretsFilePath());
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+
+    _getEncryptionKey() {
+        // Derive key from machine-id (or hostname) + SALT env or fallback
+        let machineId = null;
+        try {
+            machineId = fs.readFileSync('/etc/machine-id', 'utf8').trim();
+        } catch (e) {
+            machineId = os.hostname();
+        }
+        const SALT = process.env.WIFI_SECRET_SALT || 'CHANGE_THIS_RANDOM_SALT';
+        return crypto.createHash('sha256').update(machineId + SALT).digest(); // 32 bytes
+    }
+
+    _encryptSecret(plainText) {
+        const key = this._getEncryptionKey();
+        const iv = crypto.randomBytes(12); // GCM nonce
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+        const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+        const tag = cipher.getAuthTag();
+        return `${iv.toString('hex')}.${tag.toString('hex')}.${encrypted.toString('hex')}`;
+    }
+
+    _decryptSecret(blob) {
+        if (!blob) return null;
+        try {
+            const [ivHex, tagHex, encHex] = blob.split('.');
+            const iv = Buffer.from(ivHex, 'hex');
+            const tag = Buffer.from(tagHex, 'hex');
+            const enc = Buffer.from(encHex, 'hex');
+            const key = this._getEncryptionKey();
+            const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+            decipher.setAuthTag(tag);
+            const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
+            return dec.toString('utf8');
+        } catch (e) {
+            console.error('Failed to decrypt secret:', e.message);
+            return null;
+        }
+    }
+
+    saveSecret(ssid, password) {
+        try {
+            this._ensureSecretsDir();
+            const fp = this._secretsFilePath();
+            let data = {};
+            if (fs.existsSync(fp)) {
+                data = JSON.parse(fs.readFileSync(fp, 'utf8') || '{}');
+            }
+            data[ssid] = this._encryptSecret(password);
+            fs.writeFileSync(fp, JSON.stringify(data, null, 2), { mode: 0o600 });
+        } catch (e) {
+            console.error('Error saving WiFi secret:', e.message);
+        }
+    }
+
+    loadSecret(ssid) {
+        try {
+            const fp = this._secretsFilePath();
+            if (!fs.existsSync(fp)) return null;
+            const data = JSON.parse(fs.readFileSync(fp, 'utf8') || '{}');
+            if (!data[ssid]) return null;
+            return this._decryptSecret(data[ssid]);
+        } catch (e) {
+            console.error('Error loading WiFi secret:', e.message);
+            return null;
+        }
+    }
+    // --- end secret helpers ---
+
     /**
      * Check if WiFi is connected (not just enabled) - improved to distinguish from Ethernet
      */
     async isConnected() {
         try {
-            // Check if there's an active WiFi connection specifically
             const { stdout } = await execAsync('nmcli -t -f TYPE,STATE connection show --active');
             const lines = stdout.trim().split('\n');
             const wifiConnected = lines.some(line =>
@@ -32,7 +113,6 @@ class WiFiManager {
      */
     async getConnectionStatus() {
         try {
-            // Get only WiFi connections
             const { stdout } = await execAsync('nmcli -t -f NAME,TYPE,STATE connection show --active');
             const lines = stdout.trim().split('\n');
             const activeWiFiConnections = lines
@@ -56,6 +136,17 @@ class WiFiManager {
         try {
             console.log(`Attempting to connect to WPA network: ${ssid}`);
 
+            // Try load saved secret if none provided
+            if (!password) {
+                const saved = this.loadSecret(ssid);
+                if (saved) {
+                    console.log('Using stored (encrypted) password for SSID');
+                    password = saved;
+                }
+            }
+
+            if (!password) throw new Error('Password required for WPA/WPA2 network');
+
             // Remove existing connection with same name if it exists
             await this.removeConnection(this.connectionName);
 
@@ -67,6 +158,9 @@ class WiFiManager {
             // Attempt to connect
             await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
+
+            // Persist secret locally (obfuscated)
+            this.saveSecret(ssid, password);
 
             return { success: true, message: `Connected to ${ssid}` };
         } catch (error) {
@@ -82,6 +176,17 @@ class WiFiManager {
         try {
             console.log(`Attempting to connect to WPA2 Enterprise network: ${ssid}`);
 
+            // Try load saved secret if none provided
+            if (!password) {
+                const saved = this.loadSecret(ssid);
+                if (saved) {
+                    console.log('Using stored (encrypted) password for SSID');
+                    password = saved;
+                }
+            }
+
+            if (!password) throw new Error('Username and password required for WPA2 Enterprise');
+
             // Remove existing connection with same name if it exists
             await this.removeConnection(this.connectionName);
 
@@ -93,6 +198,9 @@ class WiFiManager {
             // Attempt to connect
             await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
+
+            // Persist secret locally (obfuscated)
+            this.saveSecret(ssid, password);
 
             return { success: true, message: `Connected to ${ssid}` };
         } catch (error) {
@@ -128,14 +236,13 @@ class WiFiManager {
     }
 
     /**
-   * Remove existing connection
-   */
+     * Remove existing connection
+     */
     async removeConnection(connectionName) {
         try {
             await execAsync(`sudo nmcli connection delete "${connectionName}"`);
             console.log(`Removed existing connection: ${connectionName}`);
         } catch (error) {
-            // Connection might not exist, which is fine
             console.log(`No existing connection to remove: ${connectionName}`);
         }
     }
@@ -153,7 +260,6 @@ class WiFiManager {
         console.log(`WiFi config found - SSID: ${ssid}`);
 
         try {
-            // Auto-detect network type based on credentials and network scan
             let detectedType = await this.detectNetworkType(ssid, { password, username });
             console.log(`Auto-detected network type: ${detectedType}`);
 
@@ -190,13 +296,11 @@ class WiFiManager {
     async detectNetworkType(ssid, credentials = {}) {
         const { password, username } = credentials;
 
-        // Rule 1: If username is provided, it's definitely Enterprise
         if (username) {
             console.log('Username provided → WPA2-Enterprise');
             return 'wpa2-enterprise';
         }
 
-        // Rule 2: If no password, assume open (but verify with scan)
         if (!password) {
             console.log('No password provided → checking if network is open');
             const networkInfo = await this.getNetworkSecurity(ssid);
@@ -208,7 +312,6 @@ class WiFiManager {
             }
         }
 
-        // Rule 3: Password provided, scan to determine WPA type
         const networkInfo = await this.getNetworkSecurity(ssid);
         if (networkInfo) {
             const security = networkInfo.security.toLowerCase();
@@ -223,7 +326,6 @@ class WiFiManager {
             }
         }
 
-        // Rule 4: Default fallback - if we have a password but can't determine type, assume WPA2
         console.log('Unable to detect specific type, defaulting to WPA2');
         return 'wpa2';
     }
@@ -264,7 +366,6 @@ class WiFiManager {
                     return { ssid: ssid || 'Hidden Network', security: security || 'Open' };
                 })
                 .filter((network, index, self) =>
-                    // Remove duplicates based on SSID
                     index === self.findIndex(n => n.ssid === network.ssid)
                 );
 
@@ -280,7 +381,6 @@ class WiFiManager {
      */
     async getConnectionInfo() {
         try {
-            // Get WiFi-specific info
             let wifiSSID = 'Not connected';
             let wifiIP = null;
 
@@ -288,14 +388,12 @@ class WiFiManager {
                 const { stdout: ssidInfo } = await execAsync('nmcli -t -f active,ssid dev wifi | grep "^yes:"');
                 wifiSSID = ssidInfo.split(':')[1] || 'Not connected';
 
-                // Get WiFi interface IP specifically
                 const { stdout: wifiIPInfo } = await execAsync('ip addr show wlan0 | grep "inet " | awk \'{print $2}\' | cut -d/ -f1');
                 wifiIP = wifiIPInfo.trim() || null;
             } catch (error) {
                 console.log('No active WiFi connection found');
             }
 
-            // Get general connection info (primary route)
             let primaryIP = 'Unknown';
             try {
                 const { stdout } = await execAsync('ip route get 8.8.8.8');
@@ -305,7 +403,6 @@ class WiFiManager {
                 console.log('Unable to determine primary IP');
             }
 
-            // Check if primary connection is via WiFi
             const connectedViaWiFi = wifiIP && (wifiIP === primaryIP);
 
             return {
@@ -334,13 +431,11 @@ class WiFiManager {
      */
     async testWiFiConnectivity() {
         try {
-            // First check if WiFi is connected
             const connectionInfo = await this.getConnectionInfo();
             if (!connectionInfo.wifiIP) {
                 return { success: false, message: 'WiFi not connected' };
             }
 
-            // Test internet via WiFi interface specifically
             await execAsync('ping -c 1 -W 3 -I wlan0 8.8.8.8');
             return { success: true, message: 'WiFi internet connectivity confirmed' };
         } catch (error) {
