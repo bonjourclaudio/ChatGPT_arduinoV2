@@ -14,21 +14,12 @@ RESTART_FILE="$SCRIPT_DIR/.kiosk_restart_request"
 
 # Function for logging
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+  # write to stdout; stdout is redirected to the main tee which appends to the log file
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
 # Redirect all stdout and stderr to log file (avoid process-substitution which can change signal delivery)
 exec > >(tee -a "$LOG_FILE") 2>&1
-
-# If /dev/tty is writable, mirror the log to it so you still see console output.
-# Note: don't test -t 1 because stdout is already redirected to the log file.
-if [ -w /dev/tty ]; then
-  tail -n 200 -F "$LOG_FILE" >/dev/tty 2>/dev/tty &
-  TAIL_PID=$!
-  log "Started log tail (pid: $TAIL_PID) -> /dev/tty"
-else
-  log "No writable /dev/tty detected; skipping live console mirror."
-fi
 
 log "Starting application"
 
