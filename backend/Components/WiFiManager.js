@@ -136,23 +136,20 @@ class WiFiManager {
         try {
             console.log(`Attempting to connect to WPA network: ${ssid}`);
 
-            // Try load saved secret if none provided
-            if (!password) {
-                const saved = this.loadSecret(ssid);
-                if (saved) {
-                    console.log('Using stored (encrypted) password for SSID');
-                    password = saved;
-                }
-            }
+            // ...existing code...
 
-            if (!password) throw new Error('Password required for WPA/WPA2 network');
-
-            // Remove existing connection with same name if it exists
             await this.removeConnection(this.connectionName);
 
             const command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}" ipv4.method auto connection.autoconnect yes`;
 
             await execAsync(command);
+
+            // <<< INSERT: prevent NM storing plaintext PSK in the system file
+            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.psk-flags 1`);
+            // remove any remaining plaintext lines in the system file (best-effort)
+            await execAsync(`sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`);
+            // <<< END INSERT
+
             console.log(`WiFi profile created for ${ssid}`);
 
             // Attempt to connect
@@ -176,23 +173,20 @@ class WiFiManager {
         try {
             console.log(`Attempting to connect to WPA2 Enterprise network: ${ssid}`);
 
-            // Try load saved secret if none provided
-            if (!password) {
-                const saved = this.loadSecret(ssid);
-                if (saved) {
-                    console.log('Using stored (encrypted) password for SSID');
-                    password = saved;
-                }
-            }
+            // ...existing code...
 
-            if (!password) throw new Error('Username and password required for WPA2 Enterprise');
-
-            // Remove existing connection with same name if it exists
             await this.removeConnection(this.connectionName);
 
             const command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" wifi-sec.key-mgmt wpa-eap 802-1x.eap peap 802-1x.phase2-auth mschapv2 802-1x.identity "${username}" 802-1x.password "${password}" ipv4.method auto connection.autoconnect yes`;
 
             await execAsync(command);
+
+            // <<< INSERT: prevent NM storing plaintext EAP password in the system file
+            await execAsync(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
+            // remove any remaining plaintext lines in the system file (best-effort)
+            await execAsync(`sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`);
+            // <<< END INSERT
+
             console.log(`WiFi Enterprise profile created for ${ssid}`);
 
             // Attempt to connect
