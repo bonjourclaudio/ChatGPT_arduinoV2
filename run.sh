@@ -20,6 +20,16 @@ log() {
 # Redirect all stdout and stderr to log file (avoid process-substitution which can change signal delivery)
 exec >>"$LOG_FILE" 2>&1
 
+# If we have a controlling terminal, mirror the log to it so you still see console output.
+if [ -t 1 ] && [ -w /dev/tty ]; then
+  # show last 200 lines and follow new output, writing directly to the user's terminal
+  tail -n 200 -F "$LOG_FILE" >/dev/tty 2>/dev/tty &
+  TAIL_PID=$!
+  log "Started log tail (pid: $TAIL_PID) -> /dev/tty"
+else
+  log "No interactive terminal detected; skipping live console mirror."
+fi
+
 log "Starting application"
 
 # Change to the directory where this script is located
@@ -93,11 +103,18 @@ fi
 cleanup() {
   log "Shutting down servers and cleaning up..."
 
-  # Stop USB watcher if running
+    # Stop USB watcher if running
   if [[ -n "$WATCHER_PID" ]]; then
     log "Stopping USB watcher (pid: $WATCHER_PID)..."
     kill "$WATCHER_PID" 2>/dev/null || true
     wait "$WATCHER_PID" 2>/dev/null || true
+  fi
+
+  # Stop tail process if running (mirror to terminal)
+  if [[ -n "$TAIL_PID" ]]; then
+    log "Stopping log tail (pid: $TAIL_PID)..."
+    kill "$TAIL_PID" 2>/dev/null || true
+    wait "$TAIL_PID" 2>/dev/null || true
   fi
 
   # Kill any process using port 3000 or 5173
