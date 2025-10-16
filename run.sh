@@ -17,8 +17,8 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-# Redirect all stdout and stderr to log file while still showing on console
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Redirect all stdout and stderr to log file (avoid process-substitution which can change signal delivery)
+exec >>"$LOG_FILE" 2>&1
 
 log "Starting application"
 
@@ -106,11 +106,16 @@ cleanup() {
   lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
   sleep 1
 
-  # Kill backend/frontend (npm) and python scripts
-  if [[ -n "$NPM_PID" ]]; then
-    log "Killing npm (pid: $NPM_PID)..."
-    kill "$NPM_PID" 2>/dev/null || true
-    wait "$NPM_PID" 2>/dev/null || true
+ # Kill backend/frontend (npm) and python scripts
+  if [[ -n "$NPM_BACK_PID" ]]; then
+    log "Killing npm backend (pid: $NPM_BACK_PID)..."
+    kill "$NPM_BACK_PID" 2>/dev/null || true
+    wait "$NPM_BACK_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$NPM_FRONT_PID" ]]; then
+    log "Killing npm frontend (pid: $NPM_FRONT_PID)..."
+    kill "$NPM_FRONT_PID" 2>/dev/null || true
+    wait "$NPM_FRONT_PID" 2>/dev/null || true
   fi
   if [[ -n "$PY_PID" ]]; then
     log "Killing python (pid: $PY_PID)..."
@@ -140,8 +145,8 @@ cleanup() {
   log "Cleanup complete."
 }
 
-# Trap EXIT and INT (Ctrl+C) and TERM
-trap cleanup EXIT SIGINT SIGTERM
+# Trap INT/TERM and run cleanup then exit (do not use EXIT here)
+trap 'cleanup; exit 0' SIGINT SIGTERM
 
 # Run cleanup at the start to clear old processes
 cleanup
@@ -205,10 +210,13 @@ watch_for_usb() {
 
 # Main runtime function: starts services and kiosk browser
 run_once() {
-  # Start backend/frontend servers in the background
-  log "Starting backend and frontend servers..."
-  npm start &
-  NPM_PID=$!
+   # Start backend and frontend servers in the background (explicit scripts so we track both)
+  log "Starting backend server..."
+  npm run start:backend &
+  NPM_BACK_PID=$!
+  log "Starting frontend server..."
+  npm run start:frontend &
+  NPM_FRONT_PID=$!
 
   # Start your Python script(s) in the background (example)
   python python/scriptTTS.py &
