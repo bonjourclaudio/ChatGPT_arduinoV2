@@ -21,3 +21,6 @@ scratch_files
 __pycache__/
 *.pyc
 python-scripts/venv/
+
+#  restart marker file
+.kiosk_restart_request

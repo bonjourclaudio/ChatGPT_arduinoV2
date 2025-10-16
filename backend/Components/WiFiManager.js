@@ -12,6 +12,22 @@ class WiFiManager {
         this.connectionName = 'auto-connect-wifi';
     }
 
+    // Helper: only supported on Linux where NetworkManager (nmcli) is available
+    _isPlatformSupported() {
+        return process.platform === 'linux';
+    }
+
+    // Helper wrapper to call execAsync with a timeout and consistent error handling
+    async _exec(cmd, opts = {}) {
+        const timeout = opts.timeout || 15000; // default 15s
+        try {
+            return await execAsync(cmd, { timeout });
+        } catch (e) {
+            // rethrow with message for callers
+            throw new Error(`Command failed: ${cmd} -> ${e.message}`);
+        }
+    }
+
     // --- secret store helpers ---
     _secretsFilePath() {
         return path.join(os.homedir(), '.config', 'chatgpt_arduino', 'wifi_secrets.json');
@@ -95,7 +111,8 @@ class WiFiManager {
      */
     async isConnected() {
         try {
-            const { stdout } = await execAsync('nmcli -t -f TYPE,STATE connection show --active');
+            if (!this._isPlatformSupported()) return false;
+            const { stdout } = await this._exec('nmcli -t -f TYPE,STATE connection show --active');
             const lines = stdout.trim().split('\n');
             const wifiConnected = lines.some(line =>
                 line.startsWith('802-11-wireless:') && line.includes(':activated')
@@ -113,7 +130,8 @@ class WiFiManager {
      */
     async getConnectionStatus() {
         try {
-            const { stdout } = await execAsync('nmcli -t -f NAME,TYPE,STATE connection show --active');
+            if (!this._isPlatformSupported()) return { connected: false, activeConnections: [] };
+            const { stdout } = await this._exec('nmcli -t -f NAME,TYPE,STATE connection show --active');
             const lines = stdout.trim().split('\n');
             const activeWiFiConnections = lines
                 .filter(line => line.includes(':802-11-wireless:activated'))
@@ -136,26 +154,31 @@ class WiFiManager {
         try {
             console.log(`Attempting to connect to WPA network: ${ssid}`);
 
+            if (!this._isPlatformSupported()) {
+                console.log('Platform does not support nmcli; skipping WiFi connect');
+                return { success: false, message: 'Platform does not support nmcli' };
+            }
+
             // ...existing code...
 
             await this.removeConnection(this.connectionName);
 
             // create connection without storing secret
             const addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
-            await execAsync(addCmd);
+            await this._exec(addCmd);
 
             // store secret via nmcli modify (this writes the secret so NM can activate)
             // For WPA-PSK:
-            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}"`);
+            await this._exec(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}"`);
 
             // attempt to bring the connection up (NM now has the secret to use)
-            await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
+            await this._exec(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
 
             // immediately mark the secret as not stored and scrub plaintext from the system file
             // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
-            await execAsync(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
-            await execAsync(
+            await this._exec(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
+            await this._exec(
                 `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
             );
 
@@ -174,24 +197,28 @@ class WiFiManager {
     async connectToWPA2Enterprise(ssid, username, password) {
         try {
             console.log(`Attempting to connect to WPA2 Enterprise network: ${ssid}`);
+            if (!this._isPlatformSupported()) {
+                console.log('Platform does not support nmcli; skipping WiFi connect');
+                return { success: false, message: 'Platform does not support nmcli' };
+            }
             await this.removeConnection(this.connectionName);
 
             // create connection without storing secret
             const addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
-            await execAsync(addCmd);
+            await this._exec(addCmd);
 
             // store secret via nmcli modify (this writes the secret so NM can activate)
             // For WPA2-Enterprise (EAP):
-            await execAsync(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-eap 802-1x.eap peap 802-1x.phase2-auth mschapv2 802-1x.identity "${username}" 802-1x.password "${password}"`);
+            await this._exec(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-eap 802-1x.eap peap 802-1x.phase2-auth mschapv2 802-1x.identity "${username}" 802-1x.password "${password}"`);
 
             // attempt to bring the connection up (NM now has the secret to use)
-            await execAsync(`sudo nmcli connection up "${this.connectionName}"`);
+            await this._exec(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
 
             // immediately mark the secret as not stored and scrub plaintext from the system file
             // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
-            await execAsync(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
-            await execAsync(
+            await this._exec(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
+            await this._exec(
                 `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
             );
 
@@ -212,12 +239,17 @@ class WiFiManager {
         try {
             console.log(`Attempting to connect to open network: ${ssid}`);
 
+            if (!this._isPlatformSupported()) {
+                console.log('Platform does not support nmcli; skipping WiFi connect');
+                return { success: false, message: 'Platform does not support nmcli' };
+            }
+
             // Remove existing connection with same name if it exists
             await this.removeConnection(this.connectionName);
 
             const command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
 
-            await execAsync(command);
+            await this._exec(command);
             console.log(`WiFi profile created for ${ssid}`);
 
             // Attempt to connect
@@ -236,7 +268,8 @@ class WiFiManager {
      */
     async removeConnection(connectionName) {
         try {
-            await execAsync(`sudo nmcli connection delete "${connectionName}"`);
+            if (!this._isPlatformSupported()) return;
+            await this._exec(`sudo nmcli connection delete "${connectionName}"`);
             console.log(`Removed existing connection: ${connectionName}`);
         } catch (error) {
             console.log(`No existing connection to remove: ${connectionName}`);

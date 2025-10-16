@@ -193,6 +193,19 @@ watch_for_usb() {
   local main_pid="$1"
 
   while true; do
+    # prune seen_list entries whose file no longer exists (handles removal)
+    if [[ ${#seen_list[@]} -gt 0 ]]; then
+      for i in "${!seen_list[@]}"; do
+        s="${seen_list[$i]}"
+        if [[ ! -f "$s" ]]; then
+          log "Detected removal of previously seen config: $s — removing from seen list"
+          unset 'seen_list[$i]'
+        fi
+      done
+      # compact array
+      seen_list=("${seen_list[@]}")
+    fi
+
     for base in "${bases[@]}"; do
       [[ -d "$base" ]] || continue
       while IFS= read -r -d '' cfg; do
