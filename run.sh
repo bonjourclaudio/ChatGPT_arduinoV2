@@ -174,36 +174,28 @@ fi
 # It will kill the main PID, wait for it to exit, then exec a fresh instance of this script.
 watch_for_usb() {
   log "Starting USB watcher..."
-  # common mount bases (user-specific where appropriate)
   local bases=( "/media/$USER" "/media" "/mnt" "/run/media/$USER" "/Volumes" )
   declare -A seen
-  # main PID of the original script (parent) - send TERM to it when we want a restart
   local main_pid="$1"
+
   while true; do
     for base in "${bases[@]}"; do
       [[ -d "$base" ]] || continue
-      # find config.js up to 3 levels deep
       while IFS= read -r -d '' cfg; do
         cfg="${cfg%/}"
         if [[ -z "${seen[$cfg]}" ]]; then
           seen[$cfg]=1
-          log "📱 Detected USB config: $cfg — initiating restart sequence..."
-          # create restart marker
+          log "📱 Detected USB config: $cfg — requesting restart..."
+          # create restart marker for the parent to see
           touch "$RESTART_FILE"
-          # ask parent to shut down
+          # signal parent to terminate so it can perform cleanup and then restart
           if [[ -n "$main_pid" ]]; then
             log "Signaling main pid $main_pid to terminate..."
             kill -TERM "$main_pid" 2>/dev/null || true
-            # wait for it to exit (timeout after 20s)
-            local waited=0
-            while ps -p "$main_pid" > /dev/null 2>&1 && [ "$waited" -lt 20 ]; do
-              sleep 0.5
-              waited=$((waited+1))
-            done
           fi
-          log "Restarting application now (watcher -> exec)..."
-          # replace watcher with a fresh instance of this script
-          exec "$0"
+          # exit watcher — do not exec from the watcher (avoids race with parent's cleanup)
+          log "USB watcher exiting after request."
+          return 0
         fi
       done < <(find "$base" -maxdepth 3 -type f -name 'config.js' -print0 2>/dev/null)
     done
