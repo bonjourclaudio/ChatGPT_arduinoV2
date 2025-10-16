@@ -1,9 +1,16 @@
+# ...existing code...
 #!/bin/bash
 set -m
 
+# Directory of this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Set log file location
-LOG_FILE="$(dirname "$0")/logs/kiosk.log"
+LOG_FILE="$SCRIPT_DIR/logs/kiosk.log"
 mkdir -p "$(dirname "$LOG_FILE")"
+
+# Restart marker file used by USB watcher
+RESTART_FILE="$SCRIPT_DIR/.kiosk_restart_request"
 
 # Function for logging
 log() {
@@ -16,7 +23,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 log "Starting application"
 
 # Change to the directory where this script is located
-cd "$(dirname "$0")"
+cd "$SCRIPT_DIR" || exit 1
 
 # Function to check for updates
 check_for_updates() {
@@ -75,131 +82,213 @@ check_for_updates() {
 check_for_updates
 
 # Activate Python virtual environment
-source python/venv/bin/activate
+if [ -f "$SCRIPT_DIR/python/venv/bin/activate" ]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/python/venv/bin/activate"
+else
+  log "⚠️ Python venv not found at python/venv - continuing without venv activation."
+fi
 
 # Function to clean up on exit
 cleanup() {
-  echo "Shutting down servers and cleaning up..."
+  log "Shutting down servers and cleaning up..."
+
+  # Stop USB watcher if running
+  if [[ -n "$WATCHER_PID" ]]; then
+    log "Stopping USB watcher (pid: $WATCHER_PID)..."
+    kill "$WATCHER_PID" 2>/dev/null || true
+    wait "$WATCHER_PID" 2>/dev/null || true
+  fi
 
   # Kill any process using port 3000 or 5173
-  echo "Killing processes on ports 3000 and 5173..."
-  lsof -ti tcp:3000 | xargs kill -9 2>/dev/null
-  lsof -ti tcp:5173 | xargs kill -9 2>/dev/null
-  sleep 2
-
+  log "Killing processes on ports 3000 and 5173..."
+  lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true
+  lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
+  sleep 1
 
   # Kill backend/frontend (npm) and python scripts
   if [[ -n "$NPM_PID" ]]; then
-    kill "$NPM_PID" 2>/dev/null
-    wait "$NPM_PID" 2>/dev/null
+    log "Killing npm (pid: $NPM_PID)..."
+    kill "$NPM_PID" 2>/dev/null || true
+    wait "$NPM_PID" 2>/dev/null || true
   fi
   if [[ -n "$PY_PID" ]]; then
-    kill "$PY_PID" 2>/dev/null
-    wait "$PY_PID" 2>/dev/null
+    log "Killing python (pid: $PY_PID)..."
+    kill "$PY_PID" 2>/dev/null || true
+    wait "$PY_PID" 2>/dev/null || true
   fi
 
   # Try to kill Chromium by PID
   if [[ -n "$CHROMIUM_PID" ]]; then
-    kill "$CHROMIUM_PID" 2>/dev/null
-    sleep 2
-    if ps -p "$CHROMIUM_PID" > /dev/null; then
-      kill -9 "$CHROMIUM_PID" 2>/dev/null
+    log "Killing chromium (pid: $CHROMIUM_PID)..."
+    kill "$CHROMIUM_PID" 2>/dev/null || true
+    sleep 1
+    if ps -p "$CHROMIUM_PID" > /dev/null 2>&1; then
+      kill -9 "$CHROMIUM_PID" 2>/dev/null || true
     fi
   fi
 
-  # Fallback: kill any chromium-browser processes
-  pkill -f chromium-browser 2>/dev/null
-  pkill -f "Google Chrome" 2>/dev/null
-  pkill -o chromium 2>/dev/null
+  # Fallback: kill any chromium-browser / Chrome processes
+  pkill -f chromium-browser 2>/dev/null || true
+  pkill -f "Google Chrome" 2>/dev/null || true
+  pkill -o chromium 2>/dev/null || true
 
-  # Kill any process using port 3000 or 5173
-  lsof -ti tcp:3000 | xargs kill -9 2>/dev/null
-  lsof -ti tcp:5173 | xargs kill -9 2>/dev/null
+  # Final attempt: free ports again
+  lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true
+  lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
 
-  echo "Cleanup complete."
+  log "Cleanup complete."
 }
 
-# Trap EXIT and INT (Ctrl+C)
+# Trap EXIT and INT (Ctrl+C) and TERM
 trap cleanup EXIT SIGINT SIGTERM
 
 # Run cleanup at the start to clear old processes
 cleanup
 
 if lsof -ti tcp:3000 >/dev/null || lsof -ti tcp:5173 >/dev/null; then
-  echo "Ports 3000 or 5173 are still in use. Exiting..."
+  log "Ports 3000 or 5173 are still in use. Exiting..."
   exit 1
 fi
 
-
 # Setup WiFi permissions only on Raspberry Pi (Linux)
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  echo "Setting up WiFi management permissions for Raspberry Pi..."
+  log "Setting up WiFi management permissions for Raspberry Pi..."
   
   # Check if we need to add the sudoers rule
   if ! sudo -n grep -q "pi ALL=(ALL) NOPASSWD: /usr/bin/nmcli" /etc/sudoers.d/nmcli-pi 2>/dev/null; then
-    echo "Adding WiFi management permissions..."
+    log "Adding WiFi management permissions..."
     echo "pi ALL=(ALL) NOPASSWD: /usr/bin/nmcli" | sudo tee /etc/sudoers.d/nmcli-pi > /dev/null
     sudo chmod 0440 /etc/sudoers.d/nmcli-pi
-    echo "WiFi permissions configured."
+    log "WiFi permissions configured."
   else
-    echo "WiFi permissions already configured."
+    log "WiFi permissions already configured."
   fi
 elif [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Running on macOS - WiFi management not required."
+  log "Running on macOS - WiFi management not required."
 else
-  echo "Unknown OS type: $OSTYPE - skipping WiFi setup."
+  log "Unknown OS type: $OSTYPE - skipping WiFi setup."
 fi
 
+# Watcher: looks for new USB mounts that contain a config.js and triggers a restart.
+# It will kill the main PID, wait for it to exit, then exec a fresh instance of this script.
+watch_for_usb() {
+  log "Starting USB watcher..."
+  # common mount bases (user-specific where appropriate)
+  local bases=( "/media/$USER" "/media" "/mnt" "/run/media/$USER" "/Volumes" )
+  declare -A seen
+  # main PID of the original script (parent) - send TERM to it when we want a restart
+  local main_pid="$1"
+  while true; do
+    for base in "${bases[@]}"; do
+      [[ -d "$base" ]] || continue
+      # find config.js up to 3 levels deep
+      while IFS= read -r -d '' cfg; do
+        cfg="${cfg%/}"
+        if [[ -z "${seen[$cfg]}" ]]; then
+          seen[$cfg]=1
+          log "📱 Detected USB config: $cfg — initiating restart sequence..."
+          # create restart marker
+          touch "$RESTART_FILE"
+          # ask parent to shut down
+          if [[ -n "$main_pid" ]]; then
+            log "Signaling main pid $main_pid to terminate..."
+            kill -TERM "$main_pid" 2>/dev/null || true
+            # wait for it to exit (timeout after 20s)
+            local waited=0
+            while ps -p "$main_pid" > /dev/null 2>&1 && [ "$waited" -lt 20 ]; do
+              sleep 0.5
+              waited=$((waited+1))
+            done
+          fi
+          log "Restarting application now (watcher -> exec)..."
+          # replace watcher with a fresh instance of this script
+          exec "$0"
+        fi
+      done < <(find "$base" -maxdepth 3 -type f -name 'config.js' -print0 2>/dev/null)
+    done
+    sleep 3
+  done
+}
 
-# Start backend/frontend servers in the background
-echo "Starting backend and frontend servers..."
-npm start &
-NPM_PID=$!
+# Main runtime function: starts services and kiosk browser
+run_once() {
+  # Start backend/frontend servers in the background
+  log "Starting backend and frontend servers..."
+  npm start &
+  NPM_PID=$!
 
-# Start your Python script(s) in the background (example)
-python python/scriptTTS.py &
-PY_PID=$!
+  # Start your Python script(s) in the background (example)
+  python python/scriptTTS.py &
+  PY_PID=$!
 
-# Wait for the frontend server to be ready
-echo "Waiting for frontend server to be ready on http://localhost:5173 ..."
-until curl -s http://localhost:5173 > /dev/null; do
-  sleep 2
-done
+  # Start USB watcher in background (gives it main PID so it can signal termination)
+  watch_for_usb "$$" &
+  WATCHER_PID=$!
 
-# Launch Chromium in kiosk mode on the attached display
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Launching default browser on macOS..." &
-  open http://localhost:5173 &
-else
-  export DISPLAY=:0
-  echo "Launching Chromium in kiosk mode..."
-  
-  # Ensure Chromium is configured to not use keyring
-  mkdir -p ~/.config/chromium/Default
-  if [ ! -f ~/.config/chromium/Default/Preferences ]; then
-    cat > ~/.config/chromium/Default/Preferences << EOL
+  # Wait for the frontend server to be ready
+  log "Waiting for frontend server to be ready on http://localhost:5173 ..."
+  until curl -s http://localhost:5173 > /dev/null; do
+    sleep 2
+  done
+
+  # Launch Chromium in kiosk mode on the attached display
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    log "Launching default browser on macOS..."
+    open http://localhost:5173 &
+  else
+    export DISPLAY=:0
+    log "Launching Chromium in kiosk mode..."
+    
+    # Ensure Chromium is configured to not use keyring
+    mkdir -p ~/.config/chromium/Default
+    if [ ! -f ~/.config/chromium/Default/Preferences ]; then
+      cat > ~/.config/chromium/Default/Preferences << EOL
 {
   "credentials_enable_service": false,
   "credentials_enable_autosignin": false
 }
 EOL
+    fi
+    
+    # Define Chromium flags to disable password prompts and other dialogs
+    CHROMIUM_FLAGS="--no-sandbox --kiosk --disable-infobars --disable-restore-session-state --disable-features=PasswordManager,GCMChannelStatus --password-store=basic --no-first-run --no-default-browser-check"
+    
+    sleep 5  # Extra wait for desktop to finish loading
+    if command -v chromium >/dev/null 2>&1; then
+      chromium $CHROMIUM_FLAGS http://localhost:5173 &
+      CHROMIUM_PID=$!
+    elif command -v chromium-browser >/dev/null 2>&1; then
+      chromium-browser $CHROMIUM_FLAGS http://localhost:5173 &
+      CHROMIUM_PID=$!
+    else
+      log "Chromium browser not found! Please install it with 'sudo apt install chromium' or 'sudo apt install chromium-browser'"
+    fi
   fi
-  
-  # Define Chromium flags to disable password prompts and other dialogs
-  CHROMIUM_FLAGS="--no-sandbox --kiosk --disable-infobars --disable-restore-session-state --disable-features=PasswordManager,GCMChannelStatus --password-store=basic --no-first-run --no-default-browser-check"
-  
-  sleep 5  # Extra wait for desktop to finish loading
-  if command -v chromium >/dev/null 2>&1; then
-    chromium $CHROMIUM_FLAGS http://localhost:5173 &
-    CHROMIUM_PID=$!
-  elif command -v chromium-browser >/dev/null 2>&1; then
-    chromium-browser $CHROMIUM_FLAGS http://localhost:5173 &
-    CHROMIUM_PID=$!
-  else
-    echo "Chromium browser not found! Please install it with 'sudo apt install chromium' or 'sudo apt install chromium-browser'"
-  fi
-fi
 
-# Wait for background jobs (so trap works)
-wait
-echo "All processes exited. Goodbye!"
+  # Wait for background jobs (so trap works). This wait returns when all children exit.
+  wait
+  log "Background jobs have exited."
+}
+
+# Top-level loop: run and restart if the watcher requested one
+while true; do
+  # Clear previous restart marker
+  rm -f "$RESTART_FILE" 2>/dev/null || true
+
+  run_once
+
+  if [ -f "$RESTART_FILE" ]; then
+    log "Restart requested by watcher. Re-launching..."
+    rm -f "$RESTART_FILE" 2>/dev/null || true
+    # small delay to allow ports to free
+    sleep 1
+    exec "$0"
+  else
+    log "No restart requested. Exiting main loop."
+    break
+  fi
+done
+
+log "All processes exited. Goodbye!"
+# ...existing code...
