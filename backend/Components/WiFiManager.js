@@ -144,6 +144,23 @@ class WiFiManager {
             return false;
         }
     }
+
+    // Helper: determine the wifi interface name (e.g., wlan0, wlp3s0) via nmcli
+    async _getWifiInterface() {
+        if (!this._isPlatformSupported()) return null;
+        try {
+            const { stdout } = await this._exec('nmcli -t -f DEVICE,TYPE device status');
+            const lines = stdout.trim().split('\n');
+            for (const line of lines) {
+                const [device, type] = line.split(':');
+                if (type === 'wifi') return device;
+            }
+            return null;
+        } catch (e) {
+            console.error('Error detecting wifi interface:', e.message);
+            return null;
+        }
+    }
     // --- end secret helpers ---
 
     /**
