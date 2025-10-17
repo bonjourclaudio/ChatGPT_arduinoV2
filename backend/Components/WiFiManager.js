@@ -104,6 +104,46 @@ class WiFiManager {
             return null;
         }
     }
+
+    // Return list of SSIDs stored in the local encrypted secrets file
+    listSavedSSIDs() {
+        try {
+            const fp = this._secretsFilePath();
+            if (!fs.existsSync(fp)) return [];
+            const data = JSON.parse(fs.readFileSync(fp, 'utf8') || '{}');
+            return Object.keys(data || {});
+        } catch (e) {
+            console.error('Error listing saved SSIDs:', e.message);
+            return [];
+        }
+    }
+
+    // Try to activate an existing NetworkManager connection profile matching the SSID
+    async tryActivateExistingProfile(ssid) {
+        if (!this._isPlatformSupported()) return false;
+        try {
+            const { stdout } = await this._exec('nmcli -t -f NAME,TYPE connection show');
+            const lines = stdout.trim().split('\n').filter(l => l.length > 0);
+            for (const line of lines) {
+                const [name, type] = line.split(':');
+                if (!name || !type) continue;
+                if (type === '802-11-wireless' && (name === ssid || name.includes(ssid))) {
+                    try {
+                        await this._exec(`sudo nmcli connection up "${name}"`);
+                        console.log(`Activated existing NM profile: ${name}`);
+                        return true;
+                    } catch (e) {
+                        // continue trying other profiles
+                        console.log(`Failed to activate profile ${name}: ${e.message}`);
+                    }
+                }
+            }
+            return false;
+        } catch (e) {
+            console.error('Error while trying to activate existing profile:', e.message);
+            return false;
+        }
+    }
     // --- end secret helpers ---
 
     /**
@@ -279,9 +319,35 @@ class WiFiManager {
      * Auto-detect network type and connect based on config WiFi settings
      */
     async connectFromConfig(wifiConfig) {
+        // If no wifiConfig provided, try to use saved secrets or existing NM profiles
         if (!wifiConfig || !wifiConfig.ssid) {
-            console.log('No WiFi configuration found in config');
-            return { success: false, message: 'No WiFi configuration provided' };
+            console.log('No WiFi configuration provided in config.js — attempting to use saved secrets or existing profiles');
+            // Try saved SSIDs from encrypted local store
+            const saved = this.listSavedSSIDs();
+            if (saved.length > 0) {
+                for (const ssid of saved) {
+                    const password = this.loadSecret(ssid);
+                    if (password) {
+                        console.log(`Found saved secret for ${ssid}, attempting to connect...`);
+                        const res = await this.connectToWPA(ssid, password).catch(e => ({ success: false, message: e.message }));
+                        if (res && res.success) return res;
+                    }
+                }
+            }
+            // Try to activate an existing NM profile matching known SSIDs (best-effort)
+            if (this._isPlatformSupported()) {
+                const candidateSSIDs = saved.length > 0 ? saved : [''];
+                // Try activating profiles without secrets as a fallback
+                try {
+                    if (await this.tryActivateExistingProfile('')) {
+                        return { success: true, message: 'Activated existing NetworkManager profile' };
+                    }
+                } catch (e) {
+                    console.log('Fallback activate existing profile failed:', e.message);
+                }
+            }
+
+            return { success: false, message: 'No wifi config found and no saved secrets/profiles available' };
         }
 
         const { ssid, password, username } = wifiConfig;
