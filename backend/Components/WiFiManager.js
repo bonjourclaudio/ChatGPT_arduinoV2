@@ -219,8 +219,10 @@ class WiFiManager {
 
             await this.removeConnection(this.connectionName);
 
-            // create connection without storing secret
-            const addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            // create connection without storing secret; prefer explicit interface if available
+            const wifiIf = await this._getWifiInterface();
+            let addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            if (wifiIf) addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname ${wifiIf} ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
             await this._exec(addCmd);
 
             // store secret via nmcli modify (this writes the secret so NM can activate)
@@ -268,8 +270,10 @@ class WiFiManager {
             }
             await this.removeConnection(this.connectionName);
 
-            // create connection without storing secret
-            const addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            // create connection without storing secret; prefer explicit interface if available
+            const wifiIf = await this._getWifiInterface();
+            let addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            if (wifiIf) addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname ${wifiIf} ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
             await this._exec(addCmd);
 
             // store secret via nmcli modify (this writes the secret so NM can activate)
@@ -319,7 +323,9 @@ class WiFiManager {
             // Remove existing connection with same name if it exists
             await this.removeConnection(this.connectionName);
 
-            const command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname wlan0 ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            const wifiIf = await this._getWifiInterface();
+            let command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+            if (wifiIf) command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname ${wifiIf} ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
 
             await this._exec(command);
             console.log(`WiFi profile created for ${ssid}`);
@@ -515,8 +521,13 @@ class WiFiManager {
                 const { stdout: ssidInfo } = await execAsync('nmcli -t -f active,ssid dev wifi | grep "^yes:"');
                 wifiSSID = ssidInfo.split(':')[1] || 'Not connected';
 
-                const { stdout: wifiIPInfo } = await execAsync('ip addr show wlan0 | grep "inet " | awk \'{print $2}\' | cut -d/ -f1');
-                wifiIP = wifiIPInfo.trim() || null;
+                const wifiIf = await this._getWifiInterface();
+                if (wifiIf) {
+                    const { stdout: wifiIPInfo } = await execAsync(`ip addr show ${wifiIf} | grep "inet " | awk '{print $2}' | cut -d/ -f1`);
+                    wifiIP = wifiIPInfo.trim() || null;
+                } else {
+                    wifiIP = null;
+                }
             } catch (error) {
                 console.log('No active WiFi connection found');
             }
@@ -563,7 +574,9 @@ class WiFiManager {
                 return { success: false, message: 'WiFi not connected' };
             }
 
-            await execAsync('ping -c 1 -W 3 -I wlan0 8.8.8.8');
+            const wifiIf = await this._getWifiInterface();
+            if (!wifiIf) return { success: false, message: 'WiFi interface not found' };
+            await execAsync(`ping -c 1 -W 3 -I ${wifiIf} 8.8.8.8`);
             return { success: true, message: 'WiFi internet connectivity confirmed' };
         } catch (error) {
             return { success: false, message: 'WiFi has no internet connectivity' };
