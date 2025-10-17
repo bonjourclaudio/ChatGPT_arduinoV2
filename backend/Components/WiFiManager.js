@@ -117,7 +117,6 @@ class WiFiManager {
             const wifiConnected = lines.some(line =>
                 line.startsWith('802-11-wireless:') && line.includes(':activated')
             );
-
             return wifiConnected;
         } catch (error) {
             console.error('Error checking WiFi status:', error.message);

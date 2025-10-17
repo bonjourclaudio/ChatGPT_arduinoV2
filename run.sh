@@ -23,8 +23,41 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 log "Starting application"
 
+# Suppress desktop pop-ups on GNOME only. Explicitly do NOTHING on macOS (Darwin).
+suppress_desktop_popups() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    log "macOS detected - skipping desktop pop-up suppression (no-op)"
+    return 0
+  fi
+
+  if command -v gsettings >/dev/null 2>&1 && gsettings writable org.gnome.desktop.notifications show-banners >/dev/null 2>&1; then
+    OLD_SHOW_BANNERS=$(gsettings get org.gnome.desktop.notifications show-banners 2>/dev/null || 'true')
+    gsettings set org.gnome.desktop.notifications show-banners false 2>/dev/null || true
+    export OLD_SHOW_BANNERS
+    log "Desktop pop-ups suppressed (GNOME banners disabled)"
+  else
+    log "No GNOME gsettings control available; skipping pop-up suppression"
+  fi
+}
+
+restore_desktop_popups() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    # explicit no-op on macOS
+    return 0
+  fi
+
+  if [[ -n "${OLD_SHOW_BANNERS:-}" ]]; then
+    gsettings set org.gnome.desktop.notifications show-banners "$OLD_SHOW_BANNERS" 2>/dev/null || true
+    log "Restored GNOME notification banners -> ${OLD_SHOW_BANNERS}"
+    unset OLD_SHOW_BANNERS
+  fi
+}
+
 # Change to the directory where this script is located
 cd "$SCRIPT_DIR" || exit 1
+
+# Try to suppress desktop pop-ups (no-op on macOS)
+suppress_desktop_popups
 
 # Function to check for updates
 check_for_updates() {
