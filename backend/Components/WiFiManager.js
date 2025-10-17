@@ -217,7 +217,10 @@ class WiFiManager {
 
             // ...existing code...
 
-            await this.removeConnection(this.connectionName);
+            // If persistence is disabled, remove any existing connection to create an ephemeral one
+            if ((process.env.WIFI_PERSISTENCE || 'true').toLowerCase() === 'false') {
+                await this.removeConnection(this.connectionName);
+            }
 
             // create connection without storing secret; prefer explicit interface if available
             const wifiIf = await this._getWifiInterface();
@@ -268,7 +271,9 @@ class WiFiManager {
                 console.log('Platform does not support nmcli; skipping WiFi connect');
                 return { success: false, message: 'Platform does not support nmcli' };
             }
-            await this.removeConnection(this.connectionName);
+            if ((process.env.WIFI_PERSISTENCE || 'true').toLowerCase() === 'false') {
+                await this.removeConnection(this.connectionName);
+            }
 
             // create connection without storing secret; prefer explicit interface if available
             const wifiIf = await this._getWifiInterface();
@@ -320,8 +325,10 @@ class WiFiManager {
                 return { success: false, message: 'Platform does not support nmcli' };
             }
 
-            // Remove existing connection with same name if it exists
-            await this.removeConnection(this.connectionName);
+            // Remove existing connection with same name if it exists (only for ephemeral mode)
+            if ((process.env.WIFI_PERSISTENCE || 'true').toLowerCase() === 'false') {
+                await this.removeConnection(this.connectionName);
+            }
 
             const wifiIf = await this._getWifiInterface();
             let command = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
