@@ -82,27 +82,27 @@ async function main() {
 
     //currentInstances.usbWatcher.eject()
 
-    // 0.2. Initialize WiFi if configured
-    if (config.wifi) {
-      console.log('📶 WiFi configuration found, attempting to connect...');
-      currentInstances.wifiManager = new WiFiManager();
-
-      try {
-        // Always attempt to connect using the provided config (connectFromConfig
-        // will detect type and use saved secrets if available).
-        const result = await currentInstances.wifiManager.connectFromConfig(config.wifi);
-        if (result && result.success) {
-          console.log('✅ WiFi connected successfully:', result.message);
-          const info = await currentInstances.wifiManager.getConnectionInfo();
-          console.log(`📡 Connected to: ${info.ssid}, IP: ${info.ip}`);
-        } else {
-          console.log('❌ WiFi connection failed:', result ? result.message : 'unknown error');
-        }
-      } catch (err) {
-        console.error('❌ Error while attempting WiFi connection:', err.message || err);
+    // 0.2. Initialize WiFi - always attempt to connect. If config.wifi is
+    // provided it will be used; otherwise connectFromConfig will try saved
+    // encrypted secrets and existing NetworkManager profiles.
+    currentInstances.wifiManager = new WiFiManager();
+    try {
+      if (config.wifi) {
+        console.log('📶 WiFi configuration found in config.js, attempting to connect...');
+      } else {
+        console.log('📶 No WiFi configuration in config.js — attempting saved secrets / existing profiles...');
       }
-    } else {
-      console.log('No WiFi configuration found in config.js');
+
+      const result = await currentInstances.wifiManager.connectFromConfig(config.wifi);
+      if (result && result.success) {
+        console.log('✅ WiFi connected successfully:', result.message);
+        const info = await currentInstances.wifiManager.getConnectionInfo();
+        console.log(`📡 Connected to: ${info.ssid}, IP: ${info.ip}`);
+      } else {
+        console.log('❌ WiFi connection failed:', result ? result.message : 'unknown error');
+      }
+    } catch (err) {
+      console.error('❌ Error while attempting WiFi connection:', err.message || err);
     }
 
     testNetworkPerformance()

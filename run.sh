@@ -31,10 +31,25 @@ suppress_desktop_popups() {
   fi
 
   if command -v gsettings >/dev/null 2>&1 && gsettings writable org.gnome.desktop.notifications show-banners >/dev/null 2>&1; then
+    # Save current values so we can restore them later
     OLD_SHOW_BANNERS=$(gsettings get org.gnome.desktop.notifications show-banners 2>/dev/null || 'true')
+    # disable notification banners
     gsettings set org.gnome.desktop.notifications show-banners false 2>/dev/null || true
+
+    # disable auto-mount and auto-open of removable media which causes file-manager popups
+    if gsettings writable org.gnome.desktop.media-handling automount >/dev/null 2>&1; then
+      OLD_AUTOMOUNT=$(gsettings get org.gnome.desktop.media-handling automount 2>/dev/null || 'true')
+      gsettings set org.gnome.desktop.media-handling automount false 2>/dev/null || true
+    fi
+    if gsettings writable org.gnome.desktop.media-handling automount-open >/dev/null 2>&1; then
+      OLD_AUTOMOUNT_OPEN=$(gsettings get org.gnome.desktop.media-handling automount-open 2>/dev/null || 'true')
+      gsettings set org.gnome.desktop.media-handling automount-open false 2>/dev/null || true
+    fi
+
     export OLD_SHOW_BANNERS
-    log "Desktop pop-ups suppressed (GNOME banners disabled)"
+    export OLD_AUTOMOUNT
+    export OLD_AUTOMOUNT_OPEN
+    log "Desktop pop-ups suppressed (GNOME banners + automount disabled)"
   else
     log "No GNOME gsettings control available; skipping pop-up suppression"
   fi
@@ -50,6 +65,18 @@ restore_desktop_popups() {
     gsettings set org.gnome.desktop.notifications show-banners "$OLD_SHOW_BANNERS" 2>/dev/null || true
     log "Restored GNOME notification banners -> ${OLD_SHOW_BANNERS}"
     unset OLD_SHOW_BANNERS
+  fi
+
+  if [[ -n "${OLD_AUTOMOUNT:-}" ]]; then
+    gsettings set org.gnome.desktop.media-handling automount "$OLD_AUTOMOUNT" 2>/dev/null || true
+    log "Restored GNOME automount -> ${OLD_AUTOMOUNT}"
+    unset OLD_AUTOMOUNT
+  fi
+
+  if [[ -n "${OLD_AUTOMOUNT_OPEN:-}" ]]; then
+    gsettings set org.gnome.desktop.media-handling automount-open "$OLD_AUTOMOUNT_OPEN" 2>/dev/null || true
+    log "Restored GNOME automount-open -> ${OLD_AUTOMOUNT_OPEN}"
+    unset OLD_AUTOMOUNT_OPEN
   fi
 }
 
@@ -182,6 +209,9 @@ cleanup() {
   lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true
   lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
 
+  # Restore desktop pop-up and automount preferences if we changed them
+  restore_desktop_popups
+
   log "Cleanup complete."
 }
 
@@ -261,9 +291,7 @@ watch_for_usb() {
               log "Signaling main pid $main_pid to request restart (SIGUSR1)..."
               kill -USR1 "$main_pid" 2>/dev/null || true
           fi
-          # exit watcher — do not exec from the watcher (avoids race with parent's cleanup)
-          log "USB watcher exiting after request."
-          return 0
+          # continue watching; do not exit so we can detect additional events
         fi
       done < <(find "$base" -maxdepth 3 -type f -name 'config.js' -print0 2>/dev/null)
     done
