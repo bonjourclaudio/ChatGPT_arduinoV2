@@ -23,8 +23,10 @@ class WiFiManager {
         try {
             return await execAsync(cmd, { timeout });
         } catch (e) {
-            // rethrow with message for callers
-            throw new Error(`Command failed: ${cmd} -> ${e.message}`);
+            // include stdout/stderr when available to help diagnostics
+            const out = e.stdout ? `\nSTDOUT:\n${e.stdout}` : '';
+            const err = e.stderr ? `\nSTDERR:\n${e.stderr}` : '';
+            throw new Error(`Command failed: ${cmd} -> ${e.message}${out}${err}`);
         }
     }
 
@@ -222,18 +224,29 @@ class WiFiManager {
                 await this.removeConnection(this.connectionName);
             }
 
-            // create connection without storing secret; prefer explicit interface if available
+            // Prefer using `nmcli device wifi connect` which provides the secret
+            // to NetworkManager at activation time (avoids 'Secrets were required' errors).
             const wifiIf = await this._getWifiInterface();
-            let addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
-            if (wifiIf) addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname ${wifiIf} ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
-            await this._exec(addCmd);
+            let deviceConnectCmd = `sudo nmcli device wifi connect "${ssid}" password "${password}"`;
+            if (wifiIf) deviceConnectCmd = `sudo nmcli device wifi connect "${ssid}" ifname ${wifiIf} password "${password}"`;
+            try {
+                await this._exec(deviceConnectCmd);
+                console.log(`Successfully connected to ${ssid} (via device wifi connect)`);
+            } catch (connectErr) {
+                console.log(`device wifi connect failed: ${connectErr.message}. Falling back to connection add/modify/up flow.`);
 
-            // store secret via nmcli modify (this writes the secret so NM can activate)
-            // For WPA-PSK:
-            await this._exec(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}"`);
+                // create connection without storing secret; prefer explicit interface if available
+                let addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+                if (wifiIf) addCmd = `sudo nmcli connection add con-name "${this.connectionName}" type wifi ifname ${wifiIf} ssid "${ssid}" ipv4.method auto connection.autoconnect yes`;
+                await this._exec(addCmd);
 
-            // attempt to bring the connection up (NM now has the secret to use)
-            await this._exec(`sudo nmcli connection up "${this.connectionName}"`);
+                // store secret via nmcli modify (this writes the secret so NM can activate)
+                // For WPA-PSK:
+                await this._exec(`sudo nmcli connection modify "${this.connectionName}" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${password}"`);
+
+                // attempt to bring the connection up (NM now has the secret to use)
+                await this._exec(`sudo nmcli connection up "${this.connectionName}"`);
+            }
             console.log(`Successfully connected to ${ssid}`);
 
             // By default keep the NetworkManager profile persistent so the connection
