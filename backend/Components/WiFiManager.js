@@ -214,15 +214,24 @@ class WiFiManager {
             await this._exec(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
 
-            // immediately mark the secret as not stored and scrub plaintext from the system file
-            // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
-            await this._exec(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
-            await this._exec(
-                `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
-            );
+            // By default keep the NetworkManager profile persistent so the connection
+            // remains active after this process exits. To make the connection
+            // ephemeral and scrub secrets from NM set WIFI_PERSISTENCE=false
+            const wifiPersistence = (process.env.WIFI_PERSISTENCE || 'true').toLowerCase();
+            if (wifiPersistence === 'false') {
+                // mark the secret as not stored and scrub plaintext from the system file
+                // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
+                await this._exec(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
+                await this._exec(
+                    `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
+                );
 
-            // persist local encrypted copy
-            this.saveSecret(ssid, password);
+                // persist local encrypted copy
+                this.saveSecret(ssid, password);
+            } else {
+                // Keep profile persistent and save encrypted local copy for future runs
+                this.saveSecret(ssid, password);
+            }
             return { success: true, message: `Connected to ${ssid}` };
         } catch (error) {
             console.error('Error connecting to WPA network:', error.message);
@@ -254,15 +263,22 @@ class WiFiManager {
             await this._exec(`sudo nmcli connection up "${this.connectionName}"`);
             console.log(`Successfully connected to ${ssid}`);
 
-            // immediately mark the secret as not stored and scrub plaintext from the system file
-            // (for PSK use wifi-sec.psk-flags 1; for EAP use 802-1x.password-flags 1)
-            await this._exec(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
-            await this._exec(
-                `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
-            );
+            // By default keep the NetworkManager profile persistent so the connection
+            // remains active after this process exits. To make the connection
+            // ephemeral and scrub secrets from NM set WIFI_PERSISTENCE=false
+            const wifiPersistence = (process.env.WIFI_PERSISTENCE || 'true').toLowerCase();
+            if (wifiPersistence === 'false') {
+                // (for EAP use 802-1x.password-flags 1)
+                await this._exec(`sudo nmcli connection modify "${this.connectionName}" 802-1x.password-flags 1`);
+                await this._exec(
+                    `sudo sed -i -e '/^\\s*psk=/d' -e '/^\\s*password=/d' /etc/NetworkManager/system-connections/"${this.connectionName}".nmconnection || true`
+                );
 
-            // persist local encrypted copy
-            this.saveSecret(ssid, password);
+                // persist local encrypted copy
+                this.saveSecret(ssid, password);
+            } else {
+                this.saveSecret(ssid, password);
+            }
 
             return { success: true, message: `Connected to ${ssid}` };
         } catch (error) {
