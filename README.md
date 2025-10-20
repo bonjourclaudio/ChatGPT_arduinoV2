@@ -52,38 +52,42 @@ git pull
 
 ## Quick start
 
-You can attempt to do the setup with the shell script setup-and-run. If this fails, then attempt the manuel process 
+You can attempt to do the setup with the setup shell script. If this fails, then attempt the manuel process 
 
 ```bash
-chmod +x setup-and-run.sh
-./setup-and-run.sh
+chmod +x setup.sh
+./setup.sh
+```
+
+If the setup is successful, you can run: 
+
+```bash
+chmod +x run.sh
+./run.sh
 ```
 
 ## Manual Setup
 
 ### 1. **Install Dependencies**
 - Update the system and install Node.js, npm, and Chromium:
-
-```bash
-sudo apt update && sudo apt upgrade -y
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-# For Raspberry Pi OS Bookworm (newer)
-sudo apt install -y nodejs chromium git
-# For Raspberry Pi OS Bullseye and earlier
-sudo apt install -y nodejs chromium-browser git
-sudo apt-get install libusb-1.0-0-dev
-sudo apt install portaudio19-dev
-sudo apt install fswebcam
-```
+  ```bash
+  sudo apt update && sudo apt upgrade -y
+  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+  # For Raspberry Pi OS Bookworm (newer)
+  sudo apt install -y nodejs chromium git
+  # For Raspberry Pi OS Bullseye and earlier
+  sudo apt install -y nodejs chromium-browser git
+  sudo apt-get install libusb-1.0-0-dev
+  sudo apt install portaudio19-dev
+  sudo apt install fswebcam
+  ```
 
 On macOS:
-```bash
   brew install nodejs
   brew install libusb
   ```
 
 ### 2. **Install Project Dependencies**
-
 ```bash
 cd ChatGPT_arduinoV2
 npm install
@@ -91,16 +95,50 @@ npm install
 
 ### 3. Create and activate a Python virtual environment and install packages
 
+This project requires Python 3.13.3 (please do not use a newer Python version, until onyxruntime is support). The instructions below assume the Python 3.13 executable is available as `python3.13`.
+
 ```bash
-python3 -m venv python/venv
+# create venv with Python 3.13.3
+python3.13 -m venv python/venv
 source python/venv/bin/activate
 
-pip3 install vosk numpy piper pyusb sounddevice requests  
-pip3 install --no-deps -r python/requirements.txt
-pip3 install onnxruntime pyaudio webrtcvad 
-
+# use the venv's python to install packages
+python -m pip install --upgrade pip wheel setuptools
+python -m pip install vosk numpy piper pyusb sounddevice requests
+python -m pip install --no-deps -r python/requirements.txt
+python -m pip install onnxruntime pyaudio webrtcvad
 ```
 
+Short notes on obtaining Python 3.13.3:
+
+- Debian/Ubuntu (including Raspberry Pi OS): use the deadsnakes PPA
+
+```bash
+sudo apt update
+sudo apt install -y software-properties-common
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.13 python3.13-venv python3.13-dev
+```
+
+- macOS (Homebrew):
+
+```bash
+brew update
+brew install python@3.13
+brew link --overwrite --force python@3.13
+```
+
+- Windows: download and install Python 3.13.3 from the official Python website and check "Add Python to PATH" during installation:
+
+https://www.python.org/downloads/release/python-3133/
+
+After installation verify the binary:
+
+```bash
+python3.13 --version
+# expected: Python 3.13.3
+```
 ### 4. setup .env file
 
 ```bash

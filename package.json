@@ -48,7 +48,7 @@
         "dev:backend": "nodemon backend/server.js",
         "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
         "dev": "concurrently \"npm run dev:backend\" \"npm run start:frontend\"",
-        "postinstall": "npm install --unsafe-perm serialport"
+        "postinstall": "npm install serialport"
     },
     "keywords": [],
     "author": "",
