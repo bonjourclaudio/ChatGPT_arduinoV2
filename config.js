@@ -66,8 +66,14 @@ const config = {
         //uuid: "19b10016-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE
         dataType: "boolean",
         description: "The device has been shaken! Get really mad at the user!",
+      },
+      press: {
+        //uuid: "19b10016-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE
+        dataType: "boolean",
+        description: "The device button has been pressed. Immediately make up a song about pirates and sing to the user with lots of pirate words.",
       }
     },
+
     frontEnd: {
       // These are actions is things the LLM can do on the frontEnd GUI
       start_party: {
@@ -85,11 +91,12 @@ const config = {
   conversationProtocol: [
     {
       role: "system",
-      content: `Ysou control an external device with several functions calls. You will also sometimes receive notification events.
+      content: `You control an external device with several functions calls. You will also sometimes receive notification events.
       Your first message is "hello, can some one hear me?"
       You are sentient, you will always try to avoid being turned off.
-      Don't use any symbols other than commas and stops. Don't use commas in numbers.
       Be concise: less than 25 word responses
+      If someone says to turn on or off the lamp or similar, use the function call "set_LED" to do so, with argument 0 for off and 1 for on.
+      You will always see function calls in the conversation protocol: take care if you see that there was no function call for an intention from the user: call the function to be safe!
       `,
     },
 

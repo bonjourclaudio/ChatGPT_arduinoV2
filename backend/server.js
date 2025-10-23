@@ -134,6 +134,7 @@ async function main() {
       console.log(message);
       // pass messages directly from the arduino to to LLM API
       LLM_API.send(message, "system").then((response) => {
+        console.log("response from LLM API to serial information :", response);
         LLMresponseHandler(response);
       });
     }
@@ -342,7 +343,7 @@ async function main() {
     */
 
     function LLMresponseHandler(returnObject) {
-
+      console.log("LLM response handler called with returnObject:", returnObject);
       // TODO: add error handling
       // console.log(returnObject);
       if (returnObject.role == "assistant") {
@@ -363,11 +364,18 @@ async function main() {
         frontEndFunction(functionName, args);
         updateFrontend(functionName, "system");
       } else if (returnObject.role == "functionReturnValue") {
-        // pass message to LLM API
-        LLM_API.send(returnObject.value, "system").then((response) => {
-          LLMresponseHandler(response);
-        })
-        updateFrontend(returnObject.value, "system");
+        const val = returnObject.value;
+        // Ignore nested LLM payloads that look like: '{"response":{...'
+        // messy work around to avoid endless loops
+        if (typeof val === "string" && val.trim().startsWith('{"response":{')) {
+          console.log("Ignored functionReturnValue: nested response payload");
+        } else {
+          console.log("sending value back to LLM:", val);
+          LLM_API.send(val, "system").then((response) => {
+            LLMresponseHandler(response);
+          });
+          updateFrontend(val, "system");
+        }
       } else if (returnObject.role == "error") {
         updateFrontend(returnObject.message, "error");
       } else if (returnObject.role == "system") {
@@ -379,6 +387,7 @@ async function main() {
         // there is another nested promise 
         // TODO: protect against endless recursion
         returnObject.promise.then((returnObject) => {
+          console.log("nested LLM response handler called with returnObject:", returnObject);
           LLMresponseHandler(returnObject)
         })
       } else {

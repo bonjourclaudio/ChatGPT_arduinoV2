@@ -281,13 +281,14 @@ class SerialCommunication extends ICommunicationMethod {
 
     // Safety check for parts[1] before calling trimEnd()
     const value = parts.length > 1 && parts[1] ? parts[1].trimEnd() : '';
-    console.log(this.config);
     let notifyObject = null;
     if (this.config &&
       this.config.functions &&
       this.config.functions.notifications &&
       this.config.functions.notifications[commandName]) {
       notifyObject = this.config.functions.notifications[commandName];
+      console.log("notification found for ", commandName);
+      console.log("notification is: ", notifyObject);
     }
 
     if (parts.length >= 2 && commandName && value) {
@@ -302,12 +303,13 @@ class SerialCommunication extends ICommunicationMethod {
       } else if (notifyObject != null) {
         // Otherwise, treat as a regular event/notification
         // check if commandName exists in notifications
-
+        console.log("sending notification for ", commandName);
         let updateObject = {
-          description: notifyObject.info,
-          value: notifyObject.value,
-          type: notifyObject.type,
+          description: commandName,
+          value: value,
+          type: notifyObject.dataType,
         }
+        console.log("notification object: ", updateObject);
         this.callback(JSON.stringify(updateObject));
       } else {
         // Handle malformed data

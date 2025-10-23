@@ -164,7 +164,17 @@ class FunctionHandler {
       } else if (functionName == "getImageDescription") {
         console.log("📸 getting image description from chatGPT")
         functionReturnPromise = getImageDescription();
+      } else if (functionName in this.config.functions.notifications) {
+        // check if functionName is on config.functions.notifications 
+
+        returnObject = functionArguments;
+        returnObject.message = "notification received: " + functionName;
+        returnObject.description = this.config.functions.notifications[functionName].description;
+        console.log("notification" + functionName + " with arguments ", returnObject);
+        returnObject.role = "notification";
+        return returnObject;
       } else {
+        // error here with notifications being run as serial commands
         // Standard function
         console.log("standard function call with name:", functionName);
         const funcDef = this.allFunctions.find(f => f.name === functionName);
@@ -195,7 +205,7 @@ class FunctionHandler {
           functionReturnPromise = method.call(this.comObject, functionArguments);
         }
       }
-    
+
       // Wait for the function to complete and handle the result
       try {
         console.log("functionReturnPromise created");
@@ -206,7 +216,7 @@ class FunctionHandler {
         });
         //console.log(functionReturnObject);
         //console.log(formattedValue);
-        console.log(functionName);
+        console.log("functionReturnObject.description:", functionReturnObject);
 
         // returnObject.promise = this.send(formattedValue, "function", functionName);
 

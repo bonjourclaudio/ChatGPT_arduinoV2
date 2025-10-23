@@ -88,9 +88,7 @@ class ChatGPTAPI {
         isImageData = false;
       }
     } else {
-
       console.log("send to llm:" + role + " " + sQuestion + " function:" + functionName)
-
     }
 
     return new Promise((resolve, reject) => {
@@ -155,14 +153,19 @@ class ChatGPTAPI {
         // Prepare API request data
         let data = {
           model: this.Model,
-          max_tokens: this.MaxTokens,
           user: this.UserId,
-          temperature: this.config.chatGPTSettings.temperature,
-          frequency_penalty: this.config.chatGPTSettings.frequency_penalty,
-          presence_penalty: this.config.chatGPTSettings.presence_penalty,
-          stop: ["#", ";"],
           messages: messages,
         };
+
+        if (typeof this.Model === "string" && this.Model.startsWith("gpt-5")) {
+          data.max_completion_tokens = this.MaxTokens;
+        } else {
+          data.max_tokens = this.MaxTokens;
+          data.temperature = this.config.chatGPTSettings.temperature;
+          data.frequency_penalty = this.config.chatGPTSettings.frequency_penalty;
+          data.presence_penalty = this.config.chatGPTSettings.presence_penalty;
+          data.stop = ["#", "ƒ"];
+        }
 
         // Only add functions for text requests, not image requests
         if (!isImageData) {
@@ -194,9 +197,10 @@ class ChatGPTAPI {
             body: JSON.stringify(data),
           });
           const duration = Date.now() - timeStampMillis;
-          console.log(`✅ ChatGPT response received in ${duration}ms`);
-          const oJson = await response.json();
 
+          const oJson = await response.json();
+          console.log(`✅ ChatGPT response received in ${duration}ms`);
+          console.log("ChatGPT response:", oJson);
           // console.log(oJson.choices[0].message,);
 
           // Handle API errors
@@ -227,8 +231,10 @@ class ChatGPTAPI {
             // if the function call has a return value, pass it back to the LLM, otherwise just resolve the result
             if (result.description == 'response') {
               // description: 'response', value: newData }
+              console.log("sending back to llM", result.value);
               resolve(this.send(result.description, "function", result.value))
             } else {
+              console.log("resolving function call result:", result);
               resolve(result);
             }
 
@@ -251,7 +257,7 @@ class ChatGPTAPI {
             }
 
             returnObject.message = sMessage;
-            // Always add the assistant's response to conversation protocol
+            // Always add the assistant's response to conversation protocolf
             this.config.conversationProtocol.push({
               role: "assistant",
               content: sMessage,
