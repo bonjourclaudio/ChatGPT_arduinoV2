@@ -188,7 +188,7 @@ chmod +x run.sh
 
 - Type a command to pause speech detection, or send text directly to the LLM
 ```bash
-{"command":"pause"}
+{"command":"protocol"}
 {"command":"sendMessage","message":"Hello from the terminal!"}
 ```
 
