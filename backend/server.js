@@ -106,6 +106,10 @@ async function main() {
     }
 
     testNetworkPerformance()
+    // set volume from config
+    console.log("setting tts volume to config value:", config.volume);
+    ttsvolume = config.volume || 50;
+
     // 1. Initialize communication method based on config
     console.log('📡 Initializing communication...');
     if (config.communicationMethod == "BLE") {
@@ -401,6 +405,7 @@ async function main() {
 
     // 8. Setup Text to Speech
     let textToSpeech = new TextToSpeech(callBackTextToSpeech);
+
 
     function callBackTextToSpeech(msg) {
       if (msg.tts == "started" || msg.tts == "resumed") {
