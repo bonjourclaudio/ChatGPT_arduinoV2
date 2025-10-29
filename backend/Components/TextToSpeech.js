@@ -50,13 +50,17 @@ class TextToSpeech {
             message.model = voice;
         }
 
-        if (vol !== undefined && vol !== null && vol >= 0 && vol <= 100) {
-            // Send volume as a separate command to avoid conflicts
-            this.py.stdin.write(JSON.stringify({ "volume": vol }) + "\n");
-        }
+        if (voice != -1) {
 
-        // Send the text and model information
-        this.py.stdin.write(JSON.stringify(message) + "\n");
+
+            if (vol !== undefined && vol !== null && vol >= 0 && vol <= 100) {
+                // Send volume as a separate command to avoid conflicts
+                this.py.stdin.write(JSON.stringify({ "volume": vol }) + "\n");
+            }
+
+            // Send the text and model information
+            this.py.stdin.write(JSON.stringify(message) + "\n");
+        }
     }
     pause() {
         py.stdin.write(JSON.stringify({ TTS: "pause" }) + "\n");

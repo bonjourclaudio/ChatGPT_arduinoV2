@@ -30,6 +30,10 @@ TTS_MODELS = {
     "de_DE-thorsten-medium.onnx": {
         "model": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx",
         "config": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json"
+    },
+    "en_GB-alan-low.onnx": {
+        "model": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/low/en_GB-alan-low.onnx",
+        "config": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/low/en_GB-alan-low.onnx.json"
     }
 }
 
@@ -61,7 +65,12 @@ def get_voice(model_name):
                 raise FileNotFoundError(f"Failed to download voice model: {model_base}")
         
         # Load model
-        voice_cache[model_path] = PiperVoice.load(model_path)
+        try:
+            voice_cache[model_path] = PiperVoice.load(model_path)
+        except FileNotFoundError as e:
+            print(f"TTS Voice loading error: {e}", file=sys.stderr)
+            send_message("tts", f"error: Missing voice data files. Please reinstall piper-tts: pip install piper-tts --force-reinstall")
+            raise
     
     return voice_cache[model_path]
 
@@ -432,7 +441,13 @@ def main():
                 continue
             
             model_name = MODEL_NAMES[model_no]
-            voice = get_voice(model_name)
+            try:
+                voice = get_voice(model_name)
+            except (FileNotFoundError, Exception) as e:
+                print(f"Failed to load voice model {model_name}: {e}", file=sys.stderr)
+                send_message("tts", f"error: Could not load voice model. Try: pip install piper-tts --force-reinstall")
+                continue
+            
             print(f"Synthesizing: {text} (model: {model_name})", file=sys.stderr)
             
             # Stop current playback and start new one
@@ -447,6 +462,7 @@ def main():
                 args=(voice, text, stop_event, pause_event, output_device)
             )
             playback_thread.start()
+            
             
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)

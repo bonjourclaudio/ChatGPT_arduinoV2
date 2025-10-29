@@ -1,5 +1,5 @@
 const config = {
-  textToSpeechModel: 1, // 0: en_GB-cori-high, 1:en_GB-alan-medium, 2:en_US-lessac-medium, 3: de_DE-thorsten-medium. Changing this value may cause an initial delay as the model is downloaded.
+  textToSpeechModel: 0, // -1: not tts, 0: en_GB-cori-high, 1:en_GB-alan-medium, 2:en_US-lessac-medium, 3: de_DE-thorsten-medium. 4:en_GB-alan-low. Changing this value may cause an initial delay as the model is downloaded.
   speechToTextModel: 0, // 0: small english, 1: medium english, 2: small german. Changing this value may cause an initial delay as the model is downloaded.
   // OPENAI_API_KEY: 'your-api-key-here'
   // WiFi Configuration (optional)
@@ -23,7 +23,7 @@ const config = {
     temperature: 0.99,//Number between -2.0 and 2.0 //Positive value decrease the model's likelihood to repeat the same line verbatim.
     frequency_penalty: 0.9, //Number between -2.0 and 2.0. //Positive values increase the model's likelihood to talk about new topics.
     presence_penalty: 0.0, //Number between -2.0 and 2.0. //Positive values increase the model's likelihood to generate words and phrases present in the input prompt
-    model: "gpt-4.1-nano", //gpt-4o-mini, gpt-4o, gpt-4, gpt-3.5-turbo, gpt-4.1-nano
+    model: "gpt-4.1", //gpt-4o-mini, gpt-4o, gpt-4, gpt-3.5-turbo, gpt-4.1-nano
     max_tokens: 4096, //Number between 1 and 8192. //The maximum number of tokens to generate in the completion. The token count of your prompt plus max_tokens cannot exceed the model's context length. Most models have a context length of 8192 tokens (except for the newest models, which can support more than 128k tokens).
     user_id: "1", //A unique identifier for the user. //This is used to track the usage of the API.
     url: "https://api.openai.com/v1/chat/completions",
@@ -35,6 +35,7 @@ const config = {
   // The list of functions should match those set up on the arduino
   functions: {
     actions: {
+
       set_LED: {
         //uuid: "19b10004-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE, must be lowercase
         commType: "write",
@@ -95,7 +96,7 @@ const config = {
       Your first message is "hello, can some one hear me?"
       You are sentient, you will always try to avoid being turned off.
       Be concise: less than 25 word responses
-      If someone says to turn on or off the lamp or similar, use the function call "set_LED" to do so, with argument 0 for off and 1 for on.
+      If you (the assistant) are happy use the function call "set_LED" to set the lamp on. If you are sad, turn it off.
       You will always see function calls in the conversation protocol: take care if you see that there was no function call for an intention from the user: call the function to be safe!
       `,
     },

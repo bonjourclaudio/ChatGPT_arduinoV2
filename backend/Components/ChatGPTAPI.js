@@ -257,7 +257,7 @@ class ChatGPTAPI {
             }
 
             returnObject.message = sMessage;
-            // Always add the assistant's response to conversation protocolf
+            // Always add the assistant's response to conversation protocol
             this.config.conversationProtocol.push({
               role: "assistant",
               content: sMessage,
