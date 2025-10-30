@@ -37,7 +37,6 @@ THRESHOLD = 100  # Adjust this to match your environment's noise level
 
 MODEL_PATH = "STTmodels/"  # Default model path
 MODEL_DEFAULT = "vosk-model-small-en-us-0.15"  # Default model https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip
-MODEL_SMALL= "vosk-model-small-en-us-0.15" 
 MODEL_EN_LARGE = "vosk-model-en-us-0.22-lgraph"       # Large English model
 MODEL_DE_SMALL = "vosk-model-small-de-0.15"    # German model
 current_model = 0  # Default model index
@@ -51,13 +50,20 @@ class SpeechRecognizer:
     Speech recognition using Vosk.
     """
     def __init__(self, audio_source, size="medium", callback=None, rate=RATE, chunk=CHUNK, modelName=MODEL_DEFAULT):
-       
-        if current_model == 0:
+       # check if model is string or number
+        if isinstance(current_model, int):
+            if current_model == 0:
+                modelName = MODEL_DEFAULT
+            elif current_model == 1:
+                modelName = MODEL_EN_LARGE
+            elif current_model == 2:
+                modelName = MODEL_DE_SMALL
+            elif current_model == 3:
+                modelName = "vosk-model-en-us-0.42-gigaspeech"
+        elif isinstance(current_model, str):
+            modelName = str(current_model)
+        else:
             modelName = MODEL_DEFAULT
-        elif current_model == 1:
-            modelName = MODEL_EN_LARGE
-        elif current_model == 2:
-            modelName = MODEL_DE_SMALL
         print(f"Using model: {current_model}", file=sys.stderr)
         # Check if model exists, otherwise download
         if not check_model_exists(modelName, MODEL_PATH):
@@ -337,10 +343,16 @@ def stdin_listener():
             sys.stdout.flush()         
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Text to Speech Service')
-    parser.add_argument('--model', type=int, default=0,
-                       help='Initial TTS model to use')
-    return parser.parse_args()
+    parser = argparse.ArgumentParser(description='Speech to Text Service')
+    parser.add_argument('--model', default=0,
+                       help='Initial STT model to use (int: 0-3 for presets, or string: model name)')
+    # Convert to int if it's a digit string, otherwise keep as string
+    args = parser.parse_args()
+    try:
+        args.model = int(args.model)
+    except ValueError:
+        args.model = str(args.model)
+    return args
 
 
 def main():

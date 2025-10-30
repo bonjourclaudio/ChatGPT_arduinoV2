@@ -408,10 +408,27 @@ async function main() {
 
 
     function callBackTextToSpeech(msg) {
+      let data = {
+        name: "TTS",
+        value: "0"
+      }
+
       if (msg.tts == "started" || msg.tts == "resumed") {
-        console.log("pausing speech to text");
+        console.log("⏸️ pausing speech to text");
+        // attempt to send message to serial alerting about text to speech starting
+
+        if (config.notifyTTS) {
+          data.value = "1"
+          currentInstances.communicationMethod.write(data);
+        }
         currentInstances.speechToText.pause();
       } else if (msg.tts == "stopped" || msg.tts == "paused") {
+        console.log("🏁 resuming speech to text");
+        if (config.notifyTTS) {
+          // attempt to send message to serial alerting about text to speech stopping
+          data.value = "0"
+          currentInstances.communicationMethod.write(data);
+        }
         currentInstances.speechToText.resume();
       }
     }

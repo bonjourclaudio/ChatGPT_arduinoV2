@@ -38,6 +38,7 @@ function connectToWebSocket() {
     // if the server is not runnning, attempt again
     ws.onmessage = (event) => {
         try {
+            console.log("WebSocket message received:", event);
             const data = JSON.parse(event.data);
             console.log(data);
             if (data.backEnd) {
@@ -45,6 +46,7 @@ function connectToWebSocket() {
                     window.assistant = data.backEnd.message;
                     updateDialogContent(".assistant", window.assistant);
                 }
+
 
                 if (data.backEnd.messageType == "system") {
                     window.system = data.backEnd.message;
@@ -137,7 +139,7 @@ function addVolumeControl() {
                 document.body.removeChild(volumeControl);
                 document.body.removeChild(volume_text);
                 document.body.removeChild(volume_bar);
-               clearTimeout(timeout);
+                clearTimeout(timeout);
             }
 
             // Create volume indicator
@@ -197,7 +199,7 @@ function addVolumeControl() {
             isDragging = false;
 
             // Hide volume control after a short delay
-          timeout =  setTimeout(() => {
+            timeout = setTimeout(() => {
                 if (volumeControl && volumeControl.parentNode) {
                     document.body.removeChild(volumeControl);
                     document.body.removeChild(volume_text);
@@ -222,7 +224,7 @@ function simpleConnectionCheck() {
             `;
             msg.textContent = 'No Internet Connection';
             document.body.appendChild(msg);
-            
+
             // Remove when back online
             const removeMsg = () => {
                 if (navigator.onLine && msg.parentNode) {
@@ -233,7 +235,7 @@ function simpleConnectionCheck() {
             window.addEventListener('online', removeMsg);
         }
     }
-    
+
     window.addEventListener('offline', showOfflineMessage);
     if (!navigator.onLine) showOfflineMessage(); // Check on load
 }
