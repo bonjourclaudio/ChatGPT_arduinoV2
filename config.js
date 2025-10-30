@@ -4,7 +4,7 @@ const config = {
   //------ alternatively, you can set speechToTextModel to a string with the model name 
   // speechToTextModel: "vosk-model-small-de-0.15",
   //------ full list of TTS models can be found here:  https://alphacephei.com/vosk/models
-  //notifyTTS: true, // if enabled, send a notification to the Arduino in the format 
+  // notifyTTS: true, // if enabled, send a notification to the Arduino in the format 
   volume: 50, // 0 to 100
   // OPENAI_API_KEY: 'your-api-key-here'
 
@@ -61,11 +61,10 @@ const config = {
         description: "Sets the motor one's speed. One byte: 0 is off, 255 is full speed",
       },
       // example of adding a camera function, this is experimental and not fully supported yet
-      //checkCamera: {
-      //  dataType: "number",
-      //  description: "Describe the scene as if you were seeing it with your eye. Use this function if your unsure what is happening or if asked what you see.",
-      // },
-
+      checkCamera: {
+        dataType: "number",
+        description: "Describe the scene as if you were seeing it with your eye. Use this function if your unsure what is happening or if asked what you see.",
+      },
     },
     notifications: {
       // These are notifications that the LLM can receive

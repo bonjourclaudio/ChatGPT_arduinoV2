@@ -130,22 +130,25 @@ function captureWithDirectCommands(fileName) {
 // Try multiple camera capture methods in sequence
 function tryCaptureMethods(fileName, methodIndex, callback) {
   const methods = [
-    // Method 1: libcamera-still (newer Pi OS)
+    // Method 1: rpicam-jpeg (replacement for libcamera-still on newer Pi OS)
+    `rpicam-jpeg -o ${fileName} --width 640 --height 480 --timeout 1 --nopreview`,
+
+    // Method 2: libcamera-still (older Pi OS)
     `libcamera-still -o ${fileName} --width 640 --height 480 --immediate --nopreview`,
 
-    // Method 2: raspistill (older Pi OS)
+    // Method 3: raspistill (legacy Pi OS)
     `raspistill -o ${fileName} -w 640 -h 480 -n`,
 
-    // Method 3: fswebcam with YUYV format (often works when default fails)
+    // Method 4: fswebcam with YUYV format (often works when default fails)
     `fswebcam -r 640x480 --no-banner --set "pixel_format=YUYV" ${fileName}`,
 
-    // Method 4: fswebcam with MJPEG format
+    // Method 5: fswebcam with MJPEG format
     `fswebcam -r 640x480 --no-banner --set "pixel_format=MJPEG" ${fileName}`,
 
-    // Method 5: fswebcam normal with lower resolution
+    // Method 6: fswebcam normal with lower resolution
     `fswebcam -r 320x240 --no-banner --jpeg 85 ${fileName}`,
 
-    // Method 6: fswebcam with lowest resolution as last resort
+    // Method 7: fswebcam with lowest resolution as last resort
     `fswebcam -r 160x120 --no-banner --jpeg 85 ${fileName}`
   ];
 

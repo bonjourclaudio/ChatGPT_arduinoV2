@@ -77,7 +77,6 @@ void processCommand(String command)
   }
   Serial.println("Failed: Unknown command");
 }
-
 void notify(String name, String info)
 {
   Serial.print(name);

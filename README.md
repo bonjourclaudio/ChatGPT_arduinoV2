@@ -219,7 +219,5 @@ Add  /.config/autostart/chatgpt-arduino.desktop with the following content:
 
 - Auto.restart when Arduino disconnected 
 - Recent changes to Chatgpt API for images: fix needed
-- Allow choice of vosk models via config file
-- improve security (shh only over ethernet)
 - add physical button to restart whole application 
 - BLE integration 

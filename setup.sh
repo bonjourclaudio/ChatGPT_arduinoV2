@@ -21,7 +21,7 @@ install_on_debian() {
 
   echo "Installing required packages (node, chromium, git, libusb, build deps)..."
   # Node 18 from nodesource
-  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+  curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
   # Try modern chromium package name first, fall back to chromium-browser
   if ! sudo apt install -y nodejs git libusb-1.0-0-dev build-essential python3-venv python3-dev libffi-dev portaudio19-dev; then
     echo "apt install failed; please check your package sources"
