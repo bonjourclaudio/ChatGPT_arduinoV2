@@ -43,8 +43,21 @@ window.frontendFunctions = {
     }
 }
 
+// Debug logging to visible console on page
+function debugLog(message) {
+    console.log(message);
+    const debugOutput = document.getElementById('debugOutput');
+    if (debugOutput) {
+        const timestamp = new Date().toLocaleTimeString();
+        debugOutput.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+        debugOutput.scrollTop = debugOutput.scrollHeight;
+    }
+}
+
+
 
 // Fetch and display latest image from scratch folder
+/*
 async function updateLatestImage() {
     try {
         const res = await fetch('http://localhost:3000/api/latest-image');
@@ -69,6 +82,37 @@ async function updateLatestImage() {
         }
     } catch (err) {
         console.error('❌ Error fetching image:', err);
+        document.getElementById('latestImage').style.display = 'none';
+    }
+}
+    */
+// Fetch and display latest image from scratch folder
+async function updateLatestImage() {
+    try {
+        debugLog("🔍 Fetching image from API...");
+        const res = await fetch('http://localhost:3000/api/latest-image');
+
+        if (!res.ok) {
+            debugLog(`❌ HTTP ${res.status}: ${res.statusText}`);
+            document.getElementById('latestImage').style.display = 'none';
+            return;
+        }
+
+        const data = await res.json();
+        debugLog(`✓ API response: ${JSON.stringify(data)}`);
+
+        if (data.image) {
+            debugLog(`📸 Displaying: ${data.image}`);
+            const img = document.getElementById('latestImage');
+            img.src = 'http://localhost:3000' + data.image + '?' + Date.now();
+            img.style.display = 'block';
+            debugLog("✓ Image displayed");
+        } else {
+            debugLog("⚠️  No image available yet");
+            document.getElementById('latestImage').style.display = 'none';
+        }
+    } catch (err) {
+        debugLog(`❌ Error: ${err.message}`);
         document.getElementById('latestImage').style.display = 'none';
     }
 }
