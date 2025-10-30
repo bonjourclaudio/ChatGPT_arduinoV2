@@ -104,10 +104,8 @@ function captureWithDirectCommands(fileName) {
         const base64Image = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
 
         console.log(`Image captured and saved as: ${fileName}`);
-        const justFilename = path.basename(fileName) + '.jpg';
-
         resolve({
-          fileName: justFilename,
+          fileName: fileName,
           description: "Camera Image",
           value: base64Image
         });
