@@ -57,7 +57,7 @@ function debugLog(message) {
 
 
 // Fetch and display latest image from scratch folder
-/*
+
 async function updateLatestImage() {
     try {
         const res = await fetch('http://localhost:3000/api/latest-image');
@@ -85,8 +85,9 @@ async function updateLatestImage() {
         document.getElementById('latestImage').style.display = 'none';
     }
 }
-    */
+
 // Fetch and display latest image from scratch folder
+/*
 async function updateLatestImage() {
     try {
         debugLog("🔍 Fetching image from API...");
@@ -117,7 +118,7 @@ async function updateLatestImage() {
     }
 }
 
-
+*/
 
 
 // Update every 1 second
