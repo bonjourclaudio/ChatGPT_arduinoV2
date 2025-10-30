@@ -42,3 +42,42 @@ window.frontendFunctions = {
         return (Math.random() * 100);
     }
 }
+
+
+// Fetch and display latest image from scratch folder
+async function updateLatestImage() {
+    try {
+        const res = await fetch('http://localhost:3000/api/latest-image');
+
+        if (!res.ok) {
+            console.error(`❌ HTTP ${res.status}: ${res.statusText}`);
+            document.getElementById('latestImage').style.display = 'none';
+            return;
+        }
+
+        const data = await res.json();
+        console.log("✓ API response:", data);
+
+        if (data.image) {
+            console.log("📸 Displaying:", data.image);
+            const img = document.getElementById('latestImage');
+            img.src = 'http://localhost:3000' + data.image + '?' + Date.now();
+            img.style.display = 'block';
+        } else {
+            console.log("⚠️  No image available yet");
+            document.getElementById('latestImage').style.display = 'none';
+        }
+    } catch (err) {
+        console.error('❌ Error fetching image:', err);
+        document.getElementById('latestImage').style.display = 'none';
+    }
+}
+
+
+
+
+// Update every 1 second
+setInterval(updateLatestImage, 2000);
+
+// Initial fetch
+updateLatestImage();

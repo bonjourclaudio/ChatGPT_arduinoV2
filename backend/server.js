@@ -15,7 +15,12 @@ import FunctionHandler from './Components/FunctionHandler.js';
 import SpeechToText from './Components/SpeechToText.js';
 import TextToSpeech from './Components/TextToSpeech.js';
 import WiFiManager from './Components/WiFiManager.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 //import USBConfigWatcher from './Components/USBConfigWatcher.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Instance tracking for restarts
 let currentInstances = {
@@ -27,7 +32,7 @@ let currentInstances = {
   speechToText: null,
   app: null
 };
-
+let latestImagePath = null;
 let isRestarting = false;
 let config = null;
 let ttsvolume = 50;
@@ -174,9 +179,55 @@ async function main() {
     currentInstances.speechToText = new SpeechToText(callBackSpeechToText, config.speechToTextModel);
 
     // 3. Setup Express middleware
+    console.log('📦 Setting up Express middleware...');
     currentInstances.app.use(cors());
+    console.log('✅ CORS middleware added');
     currentInstances.app.use(express.json());
-    currentInstances.app.use(express.static('frontend'));
+    console.log('✅ JSON middleware added');
+
+    // Debug middleware - log all requests
+    currentInstances.app.use((req, res, next) => {
+      // console.log(`📨 ${req.method} ${req.path}`);
+      next();
+    });
+
+
+    currentInstances.app.get('/api/latest-image', (req, res) => {
+      //    console.log("✓ GET /api/latest-image - returning:", latestImagePath);
+      res.json({ image: latestImagePath });
+    });
+    currentInstances.app.post('/api/latest-image', (req, res) => {
+      latestImagePath = req.body.image;
+      //   console.log("📸 Latest image updated:", latestImagePath);
+      res.json({ success: true, image: latestImagePath });
+    });
+
+    // Static files for scratch_files
+    currentInstances.app.use('/scratch_files', express.static('scratch_files'));
+
+    // Explicit 404 for any remaining API calls (not found)
+    currentInstances.app.use(express.static('frontend', {
+      index: ['index.html'],
+      setHeaders: (res, path) => {
+        if (!path.includes('.')) {
+          g
+          // No extension = likely an API route, don't serve index.html
+          res.setHeader('Cache-Control', 'no-store');
+        }
+      }
+    }));
+
+    // Explicit 404 for any remaining API calls (not found)
+    currentInstances.app.use('/api', (req, res) => {
+      console.log("❌ Unhandled API route:", req.path);
+      res.status(404).json({ error: 'API endpoint not found', path: req.path });
+    });
+
+    // Fallback: serve index.html for SPA routing (LAST)
+    currentInstances.app.use((req, res) => {
+      res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    });
+
 
     // 4. Setup WebSocket handling
     currentInstances.wss.on('connection', (ws, req) => {
@@ -640,3 +691,4 @@ async function testNetworkPerformance() {
     return null;
   }
 }
+

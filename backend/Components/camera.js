@@ -65,8 +65,9 @@ function captureWithNodeWebcam(fileName) {
 
       // Prepare base64 string for OpenAI API
       const base64Image = `data:image/jpeg;base64,${cleanBase64}`;
-
+      const justFilename = path.basename(fileName) + '.jpg';
       resolve({
+        fileName: justFilename,
         description: "Camera Image",
         value: base64Image
       });

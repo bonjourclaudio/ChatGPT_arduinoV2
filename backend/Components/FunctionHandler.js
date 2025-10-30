@@ -160,7 +160,21 @@ class FunctionHandler {
       } else if (functionName == "checkCamera") {
         // get images 
         console.log("📸 sending image to chatGPT")
-        functionReturnPromise = captureImage();
+        functionReturnPromise = captureImage().then(result => {
+          // Send image path to frontend
+          if (result && result.value) {
+            const imagePath = `/scratch_files/${result.fileName}`;
+            console.log("📸 Sending to frontend:", imagePath);
+
+            fetch('http://localhost:3000/api/latest-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: imagePath })
+            }).catch(e => console.error("Failed to update frontend image:", e));
+          }
+          return result;
+        });
+
       } else if (functionName == "getImageDescription") {
         console.log("📸 getting image description from chatGPT")
         functionReturnPromise = getImageDescription();
