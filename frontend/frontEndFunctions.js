@@ -12,7 +12,7 @@ const looper = createStemLooper({
 });
 
 looper.load(() => {
-  console.log("🎶 Stem looper loaded 🎶");
+  console.log("--- Stem looper loaded ---");
 });
 
 window.frontendFunctions = {
@@ -75,8 +75,16 @@ window.frontendFunctions = {
     looper.startTrack(3);
   },
   play_track: function (command) {
-    console.log("COMMAND", command);
-    looper.startTrack(1);
+    // command is track number 1-8 -> index 0-7
+    // could also be 45 -> play tracks 4 and 5
+
+    let digits = command.toString().split("");
+    digits.forEach((d) => {
+      let trackIndex = parseInt(d) - 1;
+      if (trackIndex >= 0 && trackIndex < 8) {
+        looper.startTrack(trackIndex);
+      }
+    });
   },
   stop_track: function (command) {
     looper.stopTrack(1);
@@ -140,7 +148,7 @@ function createStemLooper(opts) {
       xfadeMs: 60,
       fadeInSec: 0.02,
       fadeOutSec: 0.03,
-      masterGain: 0.8,
+      masterGain: 1,
       autoMix: true,
       latencyHint: "playback",
     },

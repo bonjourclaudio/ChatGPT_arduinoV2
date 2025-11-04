@@ -1,14 +1,5 @@
 import { captureImage } from "./camera.js";
 
-class Event {
-  constructor(time_gmt, time_local, title, text) {
-    this.time_gmt = time_gmt;
-    this.time_local = time_local;
-    this.title = title;
-    this.text = text;
-  }
-}
-
 class FunctionHandler {
   constructor(config, comObject) {
     // Configuration and communication object
@@ -85,24 +76,6 @@ class FunctionHandler {
     console.log("external functions:", this.allFunctions);
     console.log("scraper functions:", this.scraperFunctions);
   }
-
-  /* Run the function "checkFish" every 30 seconds to get news updates 
-  startScraperInterval() {
-    setInterval(() => {
-      console.log("🔔 Running scraper function: checkFish");
-
-      this.handleCall(
-        {
-          function_call: {
-            name: "checkFish",
-            arguments: "{}",
-          },
-        },
-        {}
-      );
-    }, 5000); // 5000 ms = 5 seconds
-  }
-    */
 
   /**
    * Helper to add formatted functions to allFunctions
@@ -206,7 +179,7 @@ class FunctionHandler {
 
         return returnObject;
       } else if (functionName == "checkFish") {
-        console.log("🔔🔔🔔 getting news from scraper function");
+        console.log("getting news from scraper function");
         functionReturnPromise = fetch(
           "https://very-teddi-iad-9839f521.koyeb.app/getRecentEvents"
         )

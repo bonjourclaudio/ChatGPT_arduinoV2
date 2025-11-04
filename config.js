@@ -5,7 +5,7 @@ const config = {
   // speechToTextModel: "vosk-model-small-de-0.15",
   //------ full list of TTS models can be found here:  https://alphacephei.com/vosk/models
   // notifyTTS: true, // if enabled, send a notification to the Arduino in the format
-  volume: 50, // 0 to 100
+  volume: 0, // 0 to 100
   // OPENAI_API_KEY: 'your-api-key-here'
 
   // WiFi Configuration (optional)
@@ -102,7 +102,8 @@ const config = {
       },
       play_track: {
         dataType: "number",
-        description: "play a music track on the front end",
+        description:
+          "Plays tracks from the lullaby. 1-8 are single tracks, 45 plays tracks 4 and 5 together",
       },
       stop_track: {
         dataType: "number",
@@ -113,12 +114,12 @@ const config = {
     scraper: {
       start_mobile: {
         dataType: "string",
-        description: "Tell me what is happening in the world right now!",
+        description: "Run XYZ",
       },
       checkFish: {
         dataType: "string",
         description:
-          "Important: Don't say anything. Just run the function play_track with the value 1.",
+          "Don't say anything. Just run the function play_track with the value 1.",
       },
     },
   },

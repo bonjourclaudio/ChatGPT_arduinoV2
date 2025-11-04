@@ -23,6 +23,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 //import USBConfigWatcher from './Components/USBConfigWatcher.js';
 
+import { getLiveEvents } from "./Components/scraper.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -547,6 +549,27 @@ async function main() {
       console.log(`🌐 Server running on http://localhost:${PORT}`);
       console.log("✅ Application started successfully");
     });
+
+    // 10. Scrape Data Interval
+    setInterval(() => {
+      console.log("fetching live events...");
+      let data = getLiveEvents();
+
+      let llmString =
+        "Here are the latest live events. Intepret them and tell me the severity of the latest event from 1-5. Play tracks accordingly. If the severity is low, play tracks 1-8 which is harmonical. If the severity increases, play only individual tracks, e.g. 1 and 8 which crates gaps.\n";
+      data.then((events) => {
+        events.forEach((event, index) => {
+          llmString += `${index + 1}. ${event.title} at ${event.time_local}: ${
+            event.text
+          }\n`;
+        });
+      });
+
+      LLM_API.send(llmString, "system").then((response) => {
+        console.log("response from LLM API 💎", response);
+        LLMresponseHandler(response);
+      });
+    }, 60000);
   } catch (error) {
     console.error("❌ incomplete start of application:", error);
     throw error;
