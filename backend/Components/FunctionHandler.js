@@ -1,8 +1,16 @@
 import { captureImage } from "./camera.js";
 
+class Event {
+  constructor(time_gmt, time_local, title, text) {
+    this.time_gmt = time_gmt;
+    this.time_local = time_local;
+    this.title = title;
+    this.text = text;
+  }
+}
+
 class FunctionHandler {
   constructor(config, comObject) {
-
     // Configuration and communication object
     this.config = config;
     this.comObject = comObject;
@@ -10,11 +18,13 @@ class FunctionHandler {
     // Function lists
     this.ignoreSerial = false;
     this.frontEndFunctions = [];
+    this.scraperFunctions = [];
     this.allFunctions = [
       // built-in functions
       {
         name: "checkConection",
-        description: "check if the connection to external device is established",
+        description:
+          "check if the connection to external device is established",
         parameters: {
           type: "object",
           properties: {
@@ -57,14 +67,42 @@ class FunctionHandler {
 
     // Add functions from config
     this.formatAndAddFunctions(config.functions.actions, this.allFunctions);
-    this.formatAndAddFunctions(config.functions.notifications, this.allFunctions);
+    this.formatAndAddFunctions(
+      config.functions.notifications,
+      this.allFunctions
+    );
     this.formatAndAddFunctions(config.functions.frontEnd, this.allFunctions);
-    this.formatAndAddFunctions(config.functions.frontEnd, this.frontEndFunctions);
+    this.formatAndAddFunctions(
+      config.functions.frontEnd,
+      this.frontEndFunctions
+    );
+
+    this.formatAndAddFunctions(config.functions.scraper, this.allFunctions);
+    this.formatAndAddFunctions(config.functions.scraper, this.scraperFunctions);
 
     // Debug: print function lists
     console.log("frontend functions:", this.frontEndFunctions);
     console.log("external functions:", this.allFunctions);
+    console.log("scraper functions:", this.scraperFunctions);
   }
+
+  /* Run the function "checkFish" every 30 seconds to get news updates 
+  startScraperInterval() {
+    setInterval(() => {
+      console.log("🔔 Running scraper function: checkFish");
+
+      this.handleCall(
+        {
+          function_call: {
+            name: "checkFish",
+            arguments: "{}",
+          },
+        },
+        {}
+      );
+    }, 5000); // 5000 ms = 5 seconds
+  }
+    */
 
   /**
    * Helper to add formatted functions to allFunctions
@@ -105,12 +143,11 @@ class FunctionHandler {
    * Attempt to call a function based on LLM response
    */
   /**
-    * Handle function calls from the OpenAI API response.
-    * Returns a Promise that resolves to a returnObject.
-    */
+   * Handle function calls from the OpenAI API response.
+   * Returns a Promise that resolves to a returnObject.
+   */
 
   async handleCall(message, returnObject) {
-
     const functionName = message.function_call.name;
     console.log("function_call with function name:", functionName);
 
@@ -133,7 +170,10 @@ class FunctionHandler {
     console.log("comMethod:", comMethod);
     let functionReturnPromise;
     // Handle communication method or local function
-    if (comMethod || this.allFunctions.some(obj => obj.name === functionName)) {
+    if (
+      comMethod ||
+      this.allFunctions.some((obj) => obj.name === functionName)
+    ) {
       console.log(functionName, "exists in functionList");
       // Ignore serial connection if requested
       /*
@@ -145,7 +185,7 @@ class FunctionHandler {
       }
 */
       // Call the appropriate method
-      if (this.frontEndFunctions.some(obj => obj.name === functionName)) {
+      if (this.frontEndFunctions.some((obj) => obj.name === functionName)) {
         console.log("front end function with name:", functionName);
         // frontend function
         returnObject.message = functionName;
@@ -157,41 +197,78 @@ class FunctionHandler {
         const method = this.comObject.getMethod(functionName);
         // this line is incorect
         functionReturnPromise = method.call(this.comObject);
+      } else if (functionName == "start_mobile") {
+        console.log("✅ Initialising mobile LIVE mode");
+
+        /* returnObject.message = "Run start_default_music with value true!";
+        returnObject.role = "system";
+        return returnObject;*/
+
+        return returnObject;
+      } else if (functionName == "checkFish") {
+        console.log("🔔🔔🔔 getting news from scraper function");
+        functionReturnPromise = fetch(
+          "https://very-teddi-iad-9839f521.koyeb.app/getRecentEvents"
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            console.log(data);
+
+            var events = [];
+
+            data.forEach((item) => {
+              let event = new Event(
+                item.time_gmt,
+                item.time_local,
+                item.title,
+                item.text
+              );
+              events.push(event);
+            });
+
+            let conflicts = events || "No recent events";
+            return { value: conflicts, description: "News Data" };
+          });
       } else if (functionName == "checkCamera") {
-        // get images 
-        console.log("📸 sending image to chatGPT")
-        functionReturnPromise = captureImage().then(result => {
+        // get images
+        console.log("📸 sending image to chatGPT");
+        functionReturnPromise = captureImage().then((result) => {
           // Send image path to frontend
           if (result && result.value) {
             const imagePath = `/scratch_files/${result.fileName}`;
             console.log("📸 Sending to frontend:", imagePath);
 
-            fetch('http://localhost:3000/api/latest-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ image: imagePath })
-            }).catch(e => console.error("Failed to update frontend image:", e));
+            fetch("http://localhost:3000/api/latest-image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image: imagePath }),
+            }).catch((e) =>
+              console.error("Failed to update frontend image:", e)
+            );
           }
           return result;
         });
-
       } else if (functionName == "getImageDescription") {
-        console.log("📸 getting image description from chatGPT")
+        console.log("📸 getting image description from chatGPT");
         functionReturnPromise = getImageDescription();
       } else if (functionName in this.config.functions.notifications) {
-        // check if functionName is on config.functions.notifications 
+        // check if functionName is on config.functions.notifications
 
         returnObject = functionArguments;
         returnObject.message = "notification received: " + functionName;
-        returnObject.description = this.config.functions.notifications[functionName].description;
-        console.log("notification" + functionName + " with arguments ", returnObject);
+        returnObject.description =
+          this.config.functions.notifications[functionName].description;
+        console.log(
+          "notification" + functionName + " with arguments ",
+          returnObject
+        );
         returnObject.role = "notification";
         return returnObject;
       } else {
         // error here with notifications being run as serial commands
         // Standard function
         console.log("standard function call with name:", functionName);
-        const funcDef = this.allFunctions.find(f => f.name === functionName);
+        const funcDef = this.allFunctions.find((f) => f.name === functionName);
         /// ignore uuid if not defined
         if (funcDef.uuid != undefined) {
           functionArguments.uuid = funcDef.uuid;
@@ -204,8 +281,14 @@ class FunctionHandler {
 
         if (funcDef.commType === "readWrite" || funcDef.commType === "write") {
           const method = this.comObject.getMethod("write");
-          console.log("calling write method with arguments:", functionArguments);
-          functionReturnPromise = method.call(this.comObject, functionArguments);
+          console.log(
+            "calling write method with arguments:",
+            functionArguments
+          );
+          functionReturnPromise = method.call(
+            this.comObject,
+            functionArguments
+          );
         } else if (funcDef.commType === "writeRaw") {
           // Write raw data to output method
           console.log("calling write raw", functionArguments);
@@ -216,7 +299,10 @@ class FunctionHandler {
           // Read only
           console.log("calling read", functionArguments);
           const method = this.comObject.getMethod("read");
-          functionReturnPromise = method.call(this.comObject, functionArguments);
+          functionReturnPromise = method.call(
+            this.comObject,
+            functionArguments
+          );
         }
       }
 
@@ -226,7 +312,7 @@ class FunctionHandler {
         const functionReturnObject = await functionReturnPromise;
         console.log("functionReturnPromise:");
         let formattedValue = JSON.stringify({
-          [functionReturnObject.description]: functionReturnObject.value
+          [functionReturnObject.description]: functionReturnObject.value,
         });
         //console.log(functionReturnObject);
         //console.log(formattedValue);
@@ -235,7 +321,8 @@ class FunctionHandler {
         // returnObject.promise = this.send(formattedValue, "function", functionName);
 
         if (functionReturnObject.description === "Error") {
-          returnObject.message = "function_call with error: " + functionReturnObject.value;
+          returnObject.message =
+            "function_call with error: " + functionReturnObject.value;
           returnObject.role = "error";
         } else {
           returnObject.message = "function_call complete: " + functionName;

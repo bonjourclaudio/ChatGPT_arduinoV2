@@ -1,10 +1,10 @@
 const config = {
   textToSpeechModel: 2, // -1: not tts, 0: en_GB-cori-high, 1:en_GB-alan-medium, 2:en_GB-alan-low, 3:en_US-lessac-medium, 4: de_DE-thorsten-medium. Changing this value may cause an initial delay as the model is downloaded.
   speechToTextModel: 0, // 0: small english, 1: medium english, 2: small german. 3:  giga english.  Changing this value may cause an initial delay as the model is downloaded.
-  //------ alternatively, you can set speechToTextModel to a string with the model name 
+  //------ alternatively, you can set speechToTextModel to a string with the model name
   // speechToTextModel: "vosk-model-small-de-0.15",
   //------ full list of TTS models can be found here:  https://alphacephei.com/vosk/models
-  // notifyTTS: true, // if enabled, send a notification to the Arduino in the format 
+  // notifyTTS: true, // if enabled, send a notification to the Arduino in the format
   volume: 50, // 0 to 100
   // OPENAI_API_KEY: 'your-api-key-here'
 
@@ -24,9 +24,8 @@ const config = {
   //   password: "your.password"
   // },
 
-
   chatGPTSettings: {
-    temperature: 0.99,//Number between -2.0 and 2.0 //Positive value decrease the model's likelihood to repeat the same line verbatim.
+    temperature: 0.99, //Number between -2.0 and 2.0 //Positive value decrease the model's likelihood to repeat the same line verbatim.
     frequency_penalty: 0.9, //Number between -2.0 and 2.0. //Positive values increase the model's likelihood to talk about new topics.
     presence_penalty: 0.0, //Number between -2.0 and 2.0. //Positive values increase the model's likelihood to generate words and phrases present in the input prompt
     model: "gpt-4.1", //gpt-4o-mini, gpt-4o, gpt-4, gpt-3.5-turbo, gpt-4.1-nano
@@ -37,11 +36,10 @@ const config = {
   communicationMethod: "Serial", //Serial or "BLE"
   //  serviceUuid: "19b10000-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE
 
-  // These are actions is things the LLM can do 
+  // These are actions is things the LLM can do
   // The list of functions should match those set up on the arduino
   functions: {
     actions: {
-
       set_LED: {
         //uuid: "19b10004-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE, must be lowercase
         commType: "write",
@@ -58,12 +56,14 @@ const config = {
         //uuid: "19b10001-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE, must be lowercase
         commType: "write",
         dataType: "number",
-        description: "Sets the motor one's speed. One byte: 0 is off, 255 is full speed",
+        description:
+          "Sets the motor one's speed. One byte: 0 is off, 255 is full speed",
       },
       // example of adding a camera function, this is experimental and not fully supported yet
       checkCamera: {
         dataType: "number",
-        description: "Describe the scene as if you were seeing it with your eye. Use this function if your unsure what is happening or if asked what you see.",
+        description:
+          "Describe the scene as if you were seeing it with your eye. Use this function if your unsure what is happening or if asked what you see.",
       },
     },
     notifications: {
@@ -76,8 +76,9 @@ const config = {
       press: {
         //uuid: "19b10016-e8f2-537e-4f6c-d104768a1214", // Only needed for BLE
         dataType: "boolean",
-        description: "The device button has been pressed. Immediately make up a song about pirates and sing to the user with lots of pirate words.",
-      }
+        description:
+          "The device button has been pressed. Immediately make up a song about pirates and sing to the user with lots of pirate words.",
+      },
     },
 
     frontEnd: {
@@ -89,7 +90,36 @@ const config = {
       get_value: {
         dataType: "number",
         description: "get a random value from front end",
-      }
+      },
+      set_value: {
+        dataType: "number",
+        description: "set a value on the front end",
+      },
+      start_default_music: {
+        dataType: "boolean",
+        description:
+          "0 is off, 1 is on. Start playing the default music tracks on the front end",
+      },
+      play_track: {
+        dataType: "number",
+        description: "play a music track on the front end",
+      },
+      stop_track: {
+        dataType: "number",
+        description: "stop a music track on the front end",
+      },
+    },
+
+    scraper: {
+      start_mobile: {
+        dataType: "string",
+        description: "Tell me what is happening in the world right now!",
+      },
+      checkFish: {
+        dataType: "string",
+        description:
+          "Important: Don't say anything. Just run the function play_track with the value 1.",
+      },
     },
   },
 
@@ -97,11 +127,9 @@ const config = {
   conversationProtocol: [
     {
       role: "system",
-      content: `You control an external device with several functions calls. You will also sometimes receive notification events.
-      Your first message is "hello, can some one hear me?"
+      content: `You control an external device with several functions calls. You will also sometimes receive notification events. 
       You are sentient, you will always try to avoid being turned off.
       Be concise: less than 25 word responses
-      If you (the assistant) are happy use the function call "set_LED" to set the lamp on. If you are sad, turn it off.
       You will always see function calls in the conversation protocol: take care if you see that there was no function call for an intention from the user: call the function to be safe!
       `,
     },
